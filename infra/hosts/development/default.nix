@@ -4,9 +4,6 @@
   pkgs,
   ...
 }:
-let
-  secrets = import ../../secrets/development.nix;
-in
 {
 
   disabledModules = [ "services/databases/cockroachdb.nix" ];
@@ -14,6 +11,7 @@ in
   imports = [
     ../../modules/backend.nix
     ../../modules/cockroachdb.nix
+    ../../modules/ui.nix
   ];
 
   nixpkgs.config.allowUnfreePredicate =
@@ -29,7 +27,7 @@ in
   services.openssh.enable = true;
 
   users.users.root.openssh.authorizedKeys.keyFiles = [
-    secrets.publicKeyFile
+    ../../secrets/ssh.txt
   ];
 
   environment.systemPackages = [
@@ -40,6 +38,11 @@ in
   services.kizuna-backend = {
     enable = true;
     port = 4000;
+  };
+
+  services.kizuna-ui = {
+    enable = true;
+    port = 4321;
   };
 
   # Services
@@ -61,7 +64,7 @@ in
     openPorts = true;
 
     extraArgs = [
-      "--advertise-addr=${secrets.host}:26257"
+      "--advertise-addr=zangetsu:26257"
     ];
   };
 

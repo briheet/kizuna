@@ -1,5 +1,4 @@
 docs/
 .direnv/
 .env
-infra/secrets/development.nix
-infra/secrets/*.pub
+infra/secrets/host.txt

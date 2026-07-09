@@ -9,7 +9,7 @@ You need a nixos vm first. `nixos-anywhere` helps with this.
 You can start by looking into flake.nix. It currently contains remote VM NixOS setup.
 
 To use this, do this:
-1. Copy `infra/secrets/development.example.nix` to `infra/secrets/development.nix`, then set your host IP and public key file there. Keep `development.nix` and the real `.pub` key untracked.
+1. Put the deploy SSH public key in `infra/secrets/ssh.txt`. Configure the target IP outside the repo with an SSH alias named `zangetsu`.
 2. Our current cloud config is based on hetzner. You can check it at `flake.nix` at line 27. If using digital ocean or other, please add its config. Take a look here
 [nixos anywhere other vm configs](https://github.com/nix-community/nixos-anywhere-examples/blob/main/flake.nix)
 3. After adding its config, please check `./hardware/disk-config.nix` to have your particular vm config.
@@ -56,4 +56,4 @@ Also if you read the `flake.nix`, this is an remote build.
 * hosts: This contains your `hosts/` service setup.
 * modules: We make modules of our dependencies and services and then import and use them in our `hosts/`.
 * packages: This contains application/package build definitions. These are then consumed by `modules/`.
-* secrets: Local machine-specific config lives here. Commit only example files; keep real values such as host IPs and deploy public keys untracked.
+* secrets: Public deploy keys live here. Do not commit private keys, tokens, passwords, or plaintext production secrets.

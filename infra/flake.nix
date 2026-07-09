@@ -10,7 +10,6 @@
 
     # Deploy-rs stuff
     deploy-rs.url = "github:serokell/deploy-rs";
-
   };
 
   outputs =
@@ -20,9 +19,6 @@
       deploy-rs,
       nixpkgs,
     }:
-    let
-      developmentSecrets = import ./secrets/development.nix;
-    in
     {
 
       # Main development machine
@@ -51,7 +47,7 @@
 
       # Deploy-rs node
       deploy.nodes.development = {
-        hostname = developmentSecrets.host;
+        hostname = "zangetsu";
         sshUser = "root";
         remoteBuild = true;
 

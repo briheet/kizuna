@@ -4,9 +4,6 @@
   pkgs,
   ...
 }@args:
-let
-  secrets = import ../secrets/development.nix;
-in
 {
   imports = [
     (modulesPath + "/installer/scan/not-detected.nix")
@@ -27,7 +24,7 @@ in
   ];
 
   users.users.root.openssh.authorizedKeys.keyFiles = [
-    secrets.publicKeyFile
+    ../secrets/ssh.txt
   ]
   ++ (args.extraPublicKeys or [ ]); # this is used for unit-testing this module and can be removed if not needed
 
