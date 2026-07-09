@@ -1,1 +1,5 @@
 docs/
+.direnv/
+.env
+infra/secrets/development.nix
+infra/secrets/*.pub
