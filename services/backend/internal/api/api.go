@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/briheet/kizuna/internal/config"
-	"github.com/briheet/kizuna/internal/logger"
+	"github.com/briheet/kizuna/backend/internal/config"
+	"github.com/briheet/kizuna/backend/internal/logger"
 	"github.com/gorilla/mux"
 )
 

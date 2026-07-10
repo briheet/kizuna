@@ -1,4 +1,4 @@
-module github.com/briheet/kizuna
+module github.com/briheet/kizuna/backend
 
 go 1.25.11
 

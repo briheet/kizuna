@@ -5,11 +5,10 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/briheet/kizuna/backend/internal/cmd"
+	"github.com/briheet/kizuna/workers/internal/cmd"
 )
 
 func main() {
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 

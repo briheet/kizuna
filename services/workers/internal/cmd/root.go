@@ -14,8 +14,8 @@ func Execute(ctx context.Context) int {
 
 	var profile bool
 	rootCmd := &cobra.Command{
-		Use:   "kizuna-backend",
-		Short: "Main backend service for Kizuna",
+		Use:   "kinuza-workers",
+		Short: "Main worker service for Kizuna",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 			if !profile {
@@ -53,10 +53,10 @@ func Execute(ctx context.Context) int {
 	rootCmd.PersistentFlags().BoolVarP(&profile, "profile", "p", false, "record CPU and Mem pprof")
 
 	go func() {
-		_ = http.ListenAndServe("localhost:6060", nil)
+		_ = http.ListenAndServe("localhost:6070", nil)
 	}()
 
-	rootCmd.AddCommand(ApiCmd(ctx))
+	rootCmd.AddCommand(WorkerCmd(ctx))
 
 	if err := rootCmd.Execute(); err != nil {
 		return -1
