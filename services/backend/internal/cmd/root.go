@@ -29,7 +29,6 @@ func Execute(ctx context.Context) int {
 
 			_ = pprof.StartCPUProfile(f)
 			return nil
-
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 
@@ -48,7 +47,6 @@ func Execute(ctx context.Context) int {
 			runtime.GC()
 			err := pprof.WriteHeapProfile(f)
 			return err
-
 		},
 	}
 

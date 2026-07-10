@@ -2,10 +2,15 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"time"
 
+	"github.com/briheet/kizuna/internal/api"
 	"github.com/briheet/kizuna/internal/config"
 	"github.com/briheet/kizuna/internal/logger"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func ApiCmd(ctx context.Context) *cobra.Command {
@@ -18,7 +23,7 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			// Load config
-			_, err := config.LoadConfig(ctx, configPath)
+			cfg, err := config.LoadConfig(ctx, configPath)
 			if err != nil {
 				return err
 			}
@@ -31,7 +36,31 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 
 			log.Info("Hi")
 
-			return nil
+			api := api.NewApi(ctx, cfg, log)
+			srv := api.Server(cfg.API.Port)
+
+			apiErr := make(chan error, 1)
+			go func() {
+				apiErr <- srv.ListenAndServe()
+			}()
+
+			log.Info("started api", zap.Int("port", cfg.API.Port))
+
+			select {
+			case <-ctx.Done():
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					return err
+				}
+				return nil
+			case err := <-apiErr:
+				if errors.Is(err, http.ErrServerClosed) {
+					return nil
+				}
+				return err
+			}
 		},
 	}
 
