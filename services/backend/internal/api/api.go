@@ -33,10 +33,10 @@ func (a *API) Server(port int) *http.Server {
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           a.Routes(),
-		ReadHeaderTimeout: time.Duration(a.config.API.ReadHeaderTimeout) * time.Second,
-		ReadTimeout:       time.Duration(a.config.API.ReadTimeout) * time.Second,
-		WriteTimeout:      time.Duration(a.config.API.WriteTimeout) * time.Second,
-		IdleTimeout:       time.Duration(a.config.API.IdleTimeout) * time.Second,
+		ReadHeaderTimeout: time.Duration(a.config.Api.ReadHeaderTimeout) * time.Second,
+		ReadTimeout:       time.Duration(a.config.Api.ReadTimeout) * time.Second,
+		WriteTimeout:      time.Duration(a.config.Api.WriteTimeout) * time.Second,
+		IdleTimeout:       time.Duration(a.config.Api.IdleTimeout) * time.Second,
 	}
 }
 
