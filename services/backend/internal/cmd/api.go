@@ -34,8 +34,6 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 			}
 			defer func() { _ = log.Sync() }()
 
-			log.Info("Hi")
-
 			api := api.NewApi(ctx, cfg, log)
 			srv := api.Server(cfg.Api.Port)
 

@@ -1,3 +1,4 @@
+drop table if exists jobs;
 drop table if exists chunks;
 drop table if exists graph_edges;
 drop table if exists graph_nodes;
