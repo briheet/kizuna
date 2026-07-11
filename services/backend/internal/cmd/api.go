@@ -37,14 +37,14 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 			log.Info("Hi")
 
 			api := api.NewApi(ctx, cfg, log)
-			srv := api.Server(cfg.API.Port)
+			srv := api.Server(cfg.Api.Port)
 
 			apiErr := make(chan error, 1)
 			go func() {
 				apiErr <- srv.ListenAndServe()
 			}()
 
-			log.Info("started api", zap.Int("port", cfg.API.Port))
+			log.Info("started api", zap.Int("port", cfg.Api.Port))
 
 			select {
 			case <-ctx.Done():

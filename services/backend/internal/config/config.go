@@ -10,7 +10,8 @@ import (
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 type Config struct {
-	API APIConfig `mapstructure:",squash" validate:"required"`
+	Api APIConfig `mapstructure:",squash" validate:"required"`
+	Db  DbConfig  `mapstructure:",squash" validate:"required"`
 }
 
 type APIConfig struct {
@@ -19,6 +20,10 @@ type APIConfig struct {
 	ReadTimeout       int `mapstructure:"read_timeout" validate:"required"`
 	WriteTimeout      int `mapstructure:"write_timeout" validate:"required"`
 	IdleTimeout       int `mapstructure:"idle_timeout" validate:"required"`
+}
+
+type DbConfig struct {
+	DatabaseURL string `mapstructure:"databaseurl" validate:"required"`
 }
 
 func LoadConfig(ctx context.Context, path string) (*Config, error) {

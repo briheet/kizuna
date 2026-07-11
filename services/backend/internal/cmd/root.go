@@ -57,6 +57,7 @@ func Execute(ctx context.Context) int {
 	}()
 
 	rootCmd.AddCommand(ApiCmd(ctx))
+	rootCmd.AddCommand(MigrateCmd(ctx))
 
 	if err := rootCmd.Execute(); err != nil {
 		return -1
