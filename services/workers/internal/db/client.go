@@ -12,7 +12,6 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
-
 	dbConfig, err := pgx.ParseConfig(cfg.Db.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -26,6 +25,10 @@ func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
 	return &Client{
 		conn: conn,
 	}, nil
+}
+
+func (c *Client) Conn() *pgx.Conn {
+	return c.conn
 }
 
 func (c *Client) Close(ctx context.Context) error {

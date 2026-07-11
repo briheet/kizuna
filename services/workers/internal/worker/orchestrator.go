@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/briheet/kizuna/workers/internal/config"
+	"github.com/briheet/kizuna/workers/internal/db"
+	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
 )
 
@@ -29,19 +31,26 @@ type Orchestrator struct {
 
 type OrchestratorConfig struct {
 	// Time to check in on workers.
-	RescueInterval time.Duration
+	rescueInterval time.Duration
 
 	// If not responding then.
-	ShutdownTimeout time.Duration
+	shutdownTimeout time.Duration
 }
 
 // Inits a new worker
-func NewOrchestrator(ctx context.Context, config *config.Config) (*Orchestrator, error) {
+func NewOrchestrator(ctx context.Context, config *config.Config, logger *logger.Logger) (*Orchestrator, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	// Get clients
 	providerClients, err := providers.NewClientProvider(ctx, config)
 	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	dbClient, err := db.NewClient(ctx, config)
+	if err != nil {
+		cancel()
 		return nil, err
 	}
 
@@ -52,7 +61,7 @@ func NewOrchestrator(ctx context.Context, config *config.Config) (*Orchestrator,
 	// After getting them, build and store
 	for _, category := range providers.ActiveProviders {
 		builderFunc := WorkerFuncs[WorkerCategory(category)]
-		workers = append(workers, builderFunc(ctx, providerClients))
+		workers = append(workers, builderFunc(ctx, dbClient, logger, providerClients))
 	}
 
 	// Build empty queue for now
@@ -66,4 +75,8 @@ func NewOrchestrator(ctx context.Context, config *config.Config) (*Orchestrator,
 
 func (o *Orchestrator) Start() error {
 	return nil
+}
+
+func (o *Orchestrator) Stop() {
+	o.cancel()
 }

@@ -10,6 +10,7 @@ import (
 var ActiveProviders = []string{"github"}
 
 type Client struct {
+	cfg    *config.Config
 	github *github.Client
 }
 
@@ -20,6 +21,7 @@ func NewClientProvider(ctx context.Context, cfg *config.Config) (*Client, error)
 	}
 
 	return &Client{
+		cfg:    cfg,
 		github: githubClient,
 	}, nil
 }

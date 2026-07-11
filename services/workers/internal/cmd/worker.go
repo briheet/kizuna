@@ -33,7 +33,7 @@ func WorkerCmd(ctx context.Context) *cobra.Command {
 			// Create a new orchestrator
 			// This will manage all life cycle for workers
 			// These workers include particular workers for github, slack, discord, etc
-			orchestrator, err := worker.NewOrchestrator(ctx, cfg)
+			orchestrator, err := worker.NewOrchestrator(ctx, cfg, log)
 			if err != nil {
 				return err
 			}
