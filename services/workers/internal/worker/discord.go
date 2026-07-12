@@ -7,6 +7,7 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +19,7 @@ func NewDiscordWorker(
 	client *providers.Client,
 ) Worker {
 	return &JobWorker{
+		ID:         uuid.New(),
 		WorkerName: "discord-ingestion-worker",
 		Kind:       "discord.ingest",
 		Queue:      "discord",

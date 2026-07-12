@@ -51,3 +51,9 @@ func NewClientProvider(ctx context.Context, cfg *config.Config) (*Client, error)
 }
 
 func (c *Client) Github() *github.Client { return c.github }
+
+func (c *Client) Discord() *discord.Client { return c.discord }
+
+func (c *Client) Slack() *slack.Client { return c.slack }
+
+func (c *Client) Telegram() *telegram.Client { return c.telegram }

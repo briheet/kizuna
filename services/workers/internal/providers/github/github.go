@@ -12,7 +12,7 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
-	client, err := githubsdk.NewClient()
+	client, err := githubsdk.NewClient(githubsdk.WithAuthToken(cfg.Github.Token))
 	if err != nil {
 		return nil, err
 	}
