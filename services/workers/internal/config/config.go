@@ -10,11 +10,18 @@ import (
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 type Config struct {
-	Db       DbConfig       `mapstructure:",squash" validate:"required"`
-	Discord  DiscordConfig  `mapstructure:",squash" validate:"required"`
-	Github   GithubConfig   `mapstructure:",squash" validate:"required"`
-	Slack    SlackConfig    `mapstructure:",squash" validate:"required"`
-	Telegram TelegramConfig `mapstructure:",squash" validate:"required"`
+	Confluence ConfluenceConfig `mapstructure:",squash" validate:"required"`
+	Db         DbConfig         `mapstructure:",squash" validate:"required"`
+	Discord    DiscordConfig    `mapstructure:",squash" validate:"required"`
+	Github     GithubConfig     `mapstructure:",squash" validate:"required"`
+	Slack      SlackConfig      `mapstructure:",squash" validate:"required"`
+	Jira       JiraConfig       `mapstructure:",squash" validate:"required"`
+}
+
+type ConfluenceConfig struct {
+	Host  string `mapstructure:"confluence_host" validate:"required"`
+	Mail  string `mapstructure:"confluence_mail" validate:"required"`
+	Token string `mapstructure:"confluence_token" validate:"required"`
 }
 
 type DbConfig struct {
@@ -35,8 +42,10 @@ type SlackConfig struct {
 	Token string `mapstructure:"slack_token" validate:"required"`
 }
 
-type TelegramConfig struct {
-	Token string `mapstructure:"telegram_token" validate:"required"`
+type JiraConfig struct {
+	Host  string `mapstructure:"jira_host" validate:"required"`
+	Mail  string `mapstructure:"jira_mail" validate:"required"`
+	Token string `mapstructure:"jira_token" validate:"required"`
 }
 
 func LoadConfig(ctx context.Context, path string) (*Config, error) {

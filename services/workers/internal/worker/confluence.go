@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Telegram worker
-func NewTelegramWorker(
+// Github worker
+func NewConfluenceWorker(
 	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
@@ -20,9 +20,9 @@ func NewTelegramWorker(
 ) Worker {
 	return &JobWorker{
 		ID:         uuid.New(),
-		WorkerName: "telegram-ingestion-worker",
-		Kind:       "telegram.ingest",
-		Queue:      "telegram",
+		WorkerName: "confluence-ingestion-worker",
+		Kind:       "confluence.ingest",
+		Queue:      "confluence",
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{
@@ -33,7 +33,7 @@ func NewTelegramWorker(
 			LeaseDuration:       5 * time.Minute,
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
-			logger.Info("handling telegram job", zap.String("job_id", job.ID.String()))
+			logger.Info("handling confluence job", zap.String("job_id", job.ID.String()))
 			return nil
 		}),
 	}

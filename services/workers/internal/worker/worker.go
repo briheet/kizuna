@@ -15,10 +15,11 @@ import (
 type WorkerCategory string
 
 const (
-	WorkerCategoryGithub   WorkerCategory = "github"
-	WorkerCategoryDiscord  WorkerCategory = "discord"
-	WorkerCategorySlack    WorkerCategory = "slack"
-	WorkerCategoryTelegram WorkerCategory = "telegram"
+	WorkerCategoryGithub     WorkerCategory = "github"
+	WorkerCategoryDiscord    WorkerCategory = "discord"
+	WorkerCategorySlack      WorkerCategory = "slack"
+	WorkerCategoryConfluence WorkerCategory = "confluence"
+	WorkerCategoryJira       WorkerCategory = "jira"
 )
 
 type WorkerBuilder func(ctx context.Context,
@@ -27,10 +28,11 @@ type WorkerBuilder func(ctx context.Context,
 	client *providers.Client) Worker
 
 var WorkerFuncs = map[WorkerCategory]WorkerBuilder{
-	WorkerCategoryGithub:   NewGithubWorker,
-	WorkerCategoryDiscord:  NewDiscordWorker,
-	WorkerCategorySlack:    NewSlackWorker,
-	WorkerCategoryTelegram: NewTelegramWorker,
+	WorkerCategoryGithub:     NewGithubWorker,
+	WorkerCategoryDiscord:    NewDiscordWorker,
+	WorkerCategorySlack:      NewSlackWorker,
+	WorkerCategoryConfluence: NewConfluenceWorker,
+	WorkerCategoryJira:       NewJiraWorker,
 }
 
 type Worker interface {
