@@ -1,18 +1,18 @@
-package github
+package telegram
 
 import (
 	"context"
 
 	"github.com/briheet/kizuna/workers/internal/config"
-	githubsdk "github.com/google/go-github/v89/github"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type Client struct {
-	client *githubsdk.Client
+	client *tgbotapi.BotAPI
 }
 
 func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
-	client, err := githubsdk.NewClient()
+	client, err := tgbotapi.NewBotAPI(cfg.Telegram.Token)
 	if err != nil {
 		return nil, err
 	}

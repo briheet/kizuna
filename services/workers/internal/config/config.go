@@ -10,11 +10,33 @@ import (
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 type Config struct {
-	Db DbConfig `mapstructure:",squash" validate:"required"`
+	Db       DbConfig       `mapstructure:",squash" validate:"required"`
+	Discord  DiscordConfig  `mapstructure:",squash" validate:"required"`
+	Github   GithubConfig   `mapstructure:",squash" validate:"required"`
+	Slack    SlackConfig    `mapstructure:",squash" validate:"required"`
+	Telegram TelegramConfig `mapstructure:",squash" validate:"required"`
 }
 
 type DbConfig struct {
 	DatabaseURL string `mapstructure:"databaseurl" validate:"required"`
+}
+
+type DiscordConfig struct {
+	Token     string `mapstructure:"discord_token" validate:"required"`
+	TokenType string `mapstructure:"discord_token_type" validate:"required"`
+}
+
+type GithubConfig struct {
+	Token     string `mapstructure:"github_token" validate:"required"`
+	TokenType string `mapstructure:"github_token_type" validate:"required"`
+}
+
+type SlackConfig struct {
+	Token string `mapstructure:"slack_token" validate:"required"`
+}
+
+type TelegramConfig struct {
+	Token string `mapstructure:"telegram_token" validate:"required"`
 }
 
 func LoadConfig(ctx context.Context, path string) (*Config, error) {

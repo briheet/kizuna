@@ -1,21 +1,18 @@
-package github
+package slack
 
 import (
 	"context"
 
 	"github.com/briheet/kizuna/workers/internal/config"
-	githubsdk "github.com/google/go-github/v89/github"
+	slacksdk "github.com/slack-go/slack"
 )
 
 type Client struct {
-	client *githubsdk.Client
+	client *slacksdk.Client
 }
 
 func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
-	client, err := githubsdk.NewClient()
-	if err != nil {
-		return nil, err
-	}
+	client := slacksdk.New(cfg.Slack.Token)
 
 	return &Client{
 		client: client,

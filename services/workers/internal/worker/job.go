@@ -29,6 +29,9 @@ type Job struct {
 	// Kind of job like github, slack, discord, etc.
 	Kind string
 
+	// Category of job
+	Queue string
+
 	// Payload for that particular job.
 	Payload json.RawMessage
 

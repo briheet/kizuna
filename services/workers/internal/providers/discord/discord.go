@@ -1,18 +1,19 @@
-package github
+package discord
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/briheet/kizuna/workers/internal/config"
-	githubsdk "github.com/google/go-github/v89/github"
+	discordsdk "github.com/bwmarrin/discordgo"
 )
 
 type Client struct {
-	client *githubsdk.Client
+	client *discordsdk.Session
 }
 
 func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
-	client, err := githubsdk.NewClient()
+	client, err := discordsdk.New(fmt.Sprintf("%s %s", cfg.Discord.TokenType, cfg.Discord.Token))
 	if err != nil {
 		return nil, err
 	}

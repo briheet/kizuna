@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/briheet/kizuna/workers/internal/config"
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -29,6 +30,10 @@ func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
 
 func (c *Client) Conn() *pgx.Conn {
 	return c.conn
+}
+
+func (c *Client) ExecuteTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return crdbpgx.ExecuteTx(ctx, c.conn, pgx.TxOptions{}, fn)
 }
 
 func (c *Client) Close(ctx context.Context) error {
