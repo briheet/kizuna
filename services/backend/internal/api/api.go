@@ -2,30 +2,44 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/briheet/kizuna/backend/internal/config"
+	"github.com/briheet/kizuna/backend/internal/db"
 	"github.com/briheet/kizuna/backend/internal/logger"
+	"github.com/briheet/kizuna/backend/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/backend/internal/services"
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
 type API struct {
-	config *config.Config
-	logger *logger.Logger
+	config   *config.Config
+	logger   *logger.Logger
+	validate *validator.Validate
+
+	ingestionService *services.IngestionService
 }
 
 func NewApi(
 	ctx context.Context,
 	config *config.Config,
 	logger *logger.Logger,
+	dbClient *db.Client,
 ) *API {
 
+	// Ingestion service init
+	ingestionRepo := cockroachdb.NewCockroachDbIngestionRepository(dbClient)
+	ingestionService := services.NewIngestionService(ingestionRepo)
+
 	return &API{
-		config: config,
-		logger: logger,
+		config:   config,
+		logger:   logger,
+		validate: validator.New(validator.WithRequiredStructEnabled()),
+
+		ingestionService: ingestionService,
 	}
 }
 
@@ -46,21 +60,9 @@ func (a *API) Routes() *mux.Router {
 	// v1 paths
 	sub := r.PathPrefix("/api/v1").Subrouter()
 
-	sub.HandleFunc("/health", a.getHealth).Methods("GET")
+	// Register all routes from here
+	a.registerHealthHandlers(sub)
+	a.registerIngestionHandlers(sub)
 
 	return r
-}
-
-func (a *API) getHealth(w http.ResponseWriter, r *http.Request) {
-	a.logger.Info("Health handler reached")
-
-	w.Header().Set("Content-type", "application/json")
-	err := json.NewEncoder(w).Encode(map[string]any{
-		"status": "ok",
-		"time":   time.Now().Format(time.RFC3339),
-	})
-
-	if err != nil {
-		a.logger.Error("encode health response failed")
-	}
 }
