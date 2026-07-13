@@ -7,5 +7,5 @@ import (
 )
 
 type IngestionRepository interface {
-	CreateJobs(ctx context.Context, req *types.CreateJobsRequest) error
+	CreateJobs(ctx context.Context, jobs []types.Job) error
 }

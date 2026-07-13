@@ -9,12 +9,18 @@ import (
 	"github.com/briheet/kizuna/backend/internal/config"
 	"github.com/briheet/kizuna/backend/internal/db"
 	"github.com/briheet/kizuna/backend/internal/logger"
+	"github.com/briheet/kizuna/backend/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/backend/internal/services"
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
 type API struct {
-	config *config.Config
-	logger *logger.Logger
+	config   *config.Config
+	logger   *logger.Logger
+	validate *validator.Validate
+
+	ingestionService *services.IngestionService
 }
 
 func NewApi(
@@ -24,9 +30,16 @@ func NewApi(
 	dbClient *db.Client,
 ) *API {
 
+	// Ingestion service init
+	ingestionRepo := cockroachdb.NewCockroachDbIngestionRepository(dbClient)
+	ingestionService := services.NewIngestionService(ingestionRepo)
+
 	return &API{
-		config: config,
-		logger: logger,
+		config:   config,
+		logger:   logger,
+		validate: validator.New(validator.WithRequiredStructEnabled()),
+
+		ingestionService: ingestionService,
 	}
 }
 
