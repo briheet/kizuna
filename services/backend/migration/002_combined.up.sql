@@ -68,6 +68,24 @@ CREATE TABLE "chunks" (
   "created_at" timestamptz NOT NULL
 );
 
+CREATE TABLE "jobs" (
+  "id" uuid PRIMARY KEY,
+  "kind" varchar NOT NULL,
+  "queue" varchar NOT NULL,
+  "payload" jsonb NOT NULL,
+  "state" varchar NOT NULL,
+  "priority" int DEFAULT 0,
+  "attempt" int DEFAULT 0,
+  "max_attempt" int DEFAULT 10,
+  "worker_id" uuid,
+  "scheduled_at" timestamptz,
+  "attempted_at" timestamptz,
+  "completed_at" timestamptz,
+  "leaseexpires_at" timestamptz,
+  "created_at" timestamptz,
+  "updated_at" timestamptz
+);
+
 ALTER TABLE "teams" ADD FOREIGN KEY ("organisation_id") REFERENCES "organisations" ("id");
 
 ALTER TABLE "topics" ADD FOREIGN KEY ("team_id") REFERENCES "teams" ("id");
