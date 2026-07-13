@@ -8,6 +8,7 @@ import (
 
 	"github.com/briheet/kizuna/backend/internal/api"
 	"github.com/briheet/kizuna/backend/internal/config"
+	"github.com/briheet/kizuna/backend/internal/db"
 	"github.com/briheet/kizuna/backend/internal/logger"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -34,7 +35,13 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 			}
 			defer func() { _ = log.Sync() }()
 
-			api := api.NewApi(ctx, cfg, log)
+			dbClient, err := db.NewClient(ctx, cfg)
+			if err != nil {
+				return err
+			}
+			defer dbClient.Close(ctx)
+
+			api := api.NewApi(ctx, cfg, log, dbClient)
 			srv := api.Server(cfg.Api.Port)
 
 			apiErr := make(chan error, 1)
