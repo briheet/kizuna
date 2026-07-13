@@ -62,6 +62,86 @@ func (a *API) createJobs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+	case domain.SourceTypeSlack:
+		var cfg types.CreateSlackJobsConfig
+		if err := json.Unmarshal(req.Config, &cfg); err != nil {
+			a.logger.Error("error decoding slack config", zap.Error(err))
+			http.Error(w, "invalid slack config", http.StatusBadRequest)
+			return
+		}
+
+		if err := a.validate.Struct(cfg); err != nil {
+			a.logger.Error("error validating slack config struct", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+
+		if err := a.ingestionService.CreateSlackJobs(r.Context(), &req, &cfg); err != nil {
+			a.logger.Error("error creating slack jobs", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+	case domain.SourceTypeDiscord:
+		var cfg types.CreateDiscordJobsConfig
+		if err := json.Unmarshal(req.Config, &cfg); err != nil {
+			a.logger.Error("error decoding discord config", zap.Error(err))
+			http.Error(w, "invalid discord config", http.StatusBadRequest)
+			return
+		}
+
+		if err := a.validate.Struct(cfg); err != nil {
+			a.logger.Error("error validating discord config struct", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+
+		if err := a.ingestionService.CreateDiscordJobs(r.Context(), &req, &cfg); err != nil {
+			a.logger.Error("error creating discord jobs", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+	case domain.SourceTypeJira:
+		var cfg types.CreateJiraJobsConfig
+		if err := json.Unmarshal(req.Config, &cfg); err != nil {
+			a.logger.Error("error decoding jira config", zap.Error(err))
+			http.Error(w, "invalid jira config", http.StatusBadRequest)
+			return
+		}
+
+		if err := a.validate.Struct(cfg); err != nil {
+			a.logger.Error("error validating jira config struct", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+
+		if err := a.ingestionService.CreateJiraJobs(r.Context(), &req, &cfg); err != nil {
+			a.logger.Error("error creating jira jobs", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+	case domain.SourceTypeConfluence:
+		var cfg types.CreateConfluenceJobsConfig
+		if err := json.Unmarshal(req.Config, &cfg); err != nil {
+			a.logger.Error("error decoding confluence config", zap.Error(err))
+			http.Error(w, "invalid confluence config", http.StatusBadRequest)
+			return
+		}
+
+		if err := a.validate.Struct(cfg); err != nil {
+			a.logger.Error("error validating confluence config struct", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+
+		if err := a.ingestionService.CreateConfluenceJobs(r.Context(), &req, &cfg); err != nil {
+			a.logger.Error("error creating confluence jobs", zap.Error(err))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 	default:
 		http.Error(w, "unsupported source_type", http.StatusBadRequest)
 		return

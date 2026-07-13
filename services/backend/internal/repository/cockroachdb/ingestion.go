@@ -56,7 +56,7 @@ func (r *CockroachDbIngestionRepository) CreateJobs(ctx context.Context, jobs []
 				job.Queue,
 				job.Payload,
 			); err != nil {
-				return fmt.Errorf("insert github ingestion job %s: %w", job.Kind, err)
+				return fmt.Errorf("insert ingestion job %s: %w", job.Kind, err)
 			}
 		}
 		return nil
