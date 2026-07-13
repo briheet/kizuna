@@ -39,7 +39,7 @@ func WorkerCmd(ctx context.Context) *cobra.Command {
 			}
 
 			// Start the orchestrator
-			return orchestrator.Start()
+			return orchestrator.Start(ctx)
 		},
 	}
 

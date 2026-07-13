@@ -13,7 +13,6 @@ import (
 
 // Github worker
 func NewJiraWorker(
-	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
@@ -22,7 +21,7 @@ func NewJiraWorker(
 		ID:         uuid.New(),
 		WorkerName: "jira-ingestion-worker",
 		Kind:       "jira.ingest",
-		Queue:      "jira",
+		Queue:      string(WorkerCategoryJira),
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{

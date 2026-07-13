@@ -13,7 +13,6 @@ import (
 
 // Slack worker
 func NewSlackWorker(
-	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
@@ -22,7 +21,7 @@ func NewSlackWorker(
 		ID:         uuid.New(),
 		WorkerName: "slack-ingestion-worker",
 		Kind:       "slack.ingest",
-		Queue:      "slack",
+		Queue:      string(WorkerCategorySlack),
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{

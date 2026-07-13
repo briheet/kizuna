@@ -9,16 +9,11 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"go.uber.org/zap"
 )
 
 // Main shell. Holds state to all workers.
 type Orchestrator struct {
-	// Main process context
-	ctx context.Context
-
-	// Controlling workers
-	cancel context.CancelFunc
-
 	// Main workers: github, slack, discord, etc
 	workers []Worker
 
@@ -27,6 +22,9 @@ type Orchestrator struct {
 
 	// Config for checking in on workers
 	config OrchestratorConfig
+
+	// Base logger
+	logger *logger.Logger
 }
 
 type OrchestratorConfig struct {
@@ -39,18 +37,14 @@ type OrchestratorConfig struct {
 
 // Inits a new worker
 func NewOrchestrator(ctx context.Context, config *config.Config, logger *logger.Logger) (*Orchestrator, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	// Get clients
 	providerClients, err := providers.NewClientProvider(ctx, config)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
 	dbClient, err := db.NewClient(ctx, config)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
@@ -61,22 +55,38 @@ func NewOrchestrator(ctx context.Context, config *config.Config, logger *logger.
 	// After getting them, build and store
 	for _, category := range providers.ActiveProviders {
 		builderFunc := WorkerFuncs[WorkerCategory(category)]
-		workers = append(workers, builderFunc(ctx, dbClient, logger, providerClients))
+		workers = append(workers, builderFunc(dbClient, logger, providerClients))
 	}
 
 	// Build empty queue for now
 	return &Orchestrator{
-		ctx:     ctx,
-		cancel:  cancel,
 		workers: workers,
+		logger:  logger,
 		wg:      sync.WaitGroup{},
 	}, nil
 }
 
-func (o *Orchestrator) Start() error {
-	return nil
-}
+func (o *Orchestrator) Start(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-func (o *Orchestrator) Stop() {
-	o.cancel()
+	// Make a errChan and start all workers
+	errChan := make(chan error, len(o.workers))
+
+	for _, worker := range o.workers {
+		go func(worker Worker) {
+			errChan <- worker.Start(ctx)
+		}(worker)
+	}
+
+	select {
+	// Any Particular job fails, Rn just log and exit
+	// This should be multiple cases and also depend upon custom errors returned
+	case err := <-errChan:
+		cancel()
+		o.logger.Info("Orchestrator error", zap.String("Err:", err.Error()))
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

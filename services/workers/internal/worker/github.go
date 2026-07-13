@@ -13,7 +13,6 @@ import (
 
 // Github worker
 func NewGithubWorker(
-	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
@@ -22,7 +21,7 @@ func NewGithubWorker(
 		ID:         uuid.New(),
 		WorkerName: "github-ingestion-worker",
 		Kind:       "github.ingest",
-		Queue:      "github",
+		Queue:      string(WorkerCategoryGithub),
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{
@@ -34,7 +33,11 @@ func NewGithubWorker(
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
 			logger.Info("handling github job", zap.String("job_id", job.ID.String()))
-			return nil
+			return HandleGithubJob(ctx, job)
 		}),
 	}
+}
+
+func HandleGithubJob(ctx context.Context, job Job) error {
+	return nil
 }

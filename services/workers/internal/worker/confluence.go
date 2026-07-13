@@ -13,7 +13,6 @@ import (
 
 // Github worker
 func NewConfluenceWorker(
-	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
@@ -22,7 +21,7 @@ func NewConfluenceWorker(
 		ID:         uuid.New(),
 		WorkerName: "confluence-ingestion-worker",
 		Kind:       "confluence.ingest",
-		Queue:      "confluence",
+		Queue:      string(WorkerCategoryConfluence),
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{

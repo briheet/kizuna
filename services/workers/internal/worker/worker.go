@@ -22,7 +22,7 @@ const (
 	WorkerCategoryJira       WorkerCategory = "jira"
 )
 
-type WorkerBuilder func(ctx context.Context,
+type WorkerBuilder func(
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client) Worker

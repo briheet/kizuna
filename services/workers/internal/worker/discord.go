@@ -13,7 +13,6 @@ import (
 
 // Discord worker
 func NewDiscordWorker(
-	ctx context.Context,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
@@ -22,7 +21,7 @@ func NewDiscordWorker(
 		ID:         uuid.New(),
 		WorkerName: "discord-ingestion-worker",
 		Kind:       "discord.ingest",
-		Queue:      "discord",
+		Queue:      string(WorkerCategoryDiscord),
 		Client:     dbClient,
 		Logger:     logger,
 		Config: JobConfig{
