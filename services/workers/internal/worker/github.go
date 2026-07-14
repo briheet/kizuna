@@ -7,6 +7,8 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/workers/internal/services"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -17,6 +19,9 @@ func NewGithubWorker(
 	logger *logger.Logger,
 	client *providers.Client,
 ) Worker {
+	githubRepo := cockroachdb.NewGithubRepository(dbClient)
+	githubService := services.NewGithubService(githubRepo, client.Github())
+
 	return &JobWorker{
 		ID:         uuid.New(),
 		WorkerName: "github-ingestion-worker",
@@ -33,11 +38,7 @@ func NewGithubWorker(
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
 			logger.Info("handling github job", zap.String("job_id", job.ID.String()))
-			return HandleGithubJob(ctx, job)
+			return githubService.HandleJob(ctx, job.ID, job.Kind, job.Payload)
 		}),
 	}
-}
-
-func HandleGithubJob(ctx context.Context, job Job) error {
-	return nil
 }
