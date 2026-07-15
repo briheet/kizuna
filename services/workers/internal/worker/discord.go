@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/briheet/kizuna/workers/internal/config"
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
@@ -13,6 +14,7 @@ import (
 
 // Discord worker
 func NewDiscordWorker(
+	config *config.Config,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,

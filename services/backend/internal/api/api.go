@@ -10,6 +10,7 @@ import (
 	"github.com/briheet/kizuna/backend/internal/db"
 	"github.com/briheet/kizuna/backend/internal/logger"
 	"github.com/briheet/kizuna/backend/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/backend/internal/repository/embedder"
 	"github.com/briheet/kizuna/backend/internal/services"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
@@ -21,6 +22,7 @@ type API struct {
 	validate *validator.Validate
 
 	ingestionService *services.IngestionService
+	searchService    *services.SearchService
 }
 
 func NewApi(
@@ -33,6 +35,9 @@ func NewApi(
 	// Ingestion service init
 	ingestionRepo := cockroachdb.NewCockroachDbIngestionRepository(dbClient)
 	ingestionService := services.NewIngestionService(ingestionRepo)
+	searchRepo := cockroachdb.NewCockroachDbSearchRepository(dbClient)
+	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
+	searchService := services.NewSearchService(searchRepo, embedderRepo)
 
 	return &API{
 		config:   config,
@@ -40,6 +45,7 @@ func NewApi(
 		validate: validator.New(validator.WithRequiredStructEnabled()),
 
 		ingestionService: ingestionService,
+		searchService:    searchService,
 	}
 }
 
@@ -63,6 +69,7 @@ func (a *API) Routes() *mux.Router {
 	// Register all routes from here
 	a.registerHealthHandlers(sub)
 	a.registerIngestionHandlers(sub)
+	a.registerSearchHandlers(sub)
 
 	return r
 }

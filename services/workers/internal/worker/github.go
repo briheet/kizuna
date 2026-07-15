@@ -4,23 +4,33 @@ import (
 	"context"
 	"time"
 
+	"github.com/briheet/kizuna/workers/internal/config"
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/workers/internal/repository/embedder"
+	"github.com/briheet/kizuna/workers/internal/services"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 // Github worker
 func NewGithubWorker(
+	config *config.Config,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
 ) Worker {
+	githubRepo := cockroachdb.NewGithubRepository(dbClient)
+	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
+	embedderService := services.NewEmbedderService(embedderRepo)
+	githubService := services.NewGithubService(githubRepo, client.Github(), embedderService)
+
 	return &JobWorker{
 		ID:         uuid.New(),
 		WorkerName: "github-ingestion-worker",
-		Kind:       "github.ingest",
+		Kind:       "",
 		Queue:      string(WorkerCategoryGithub),
 		Client:     dbClient,
 		Logger:     logger,
@@ -33,11 +43,7 @@ func NewGithubWorker(
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
 			logger.Info("handling github job", zap.String("job_id", job.ID.String()))
-			return HandleGithubJob(ctx, job)
+			return githubService.HandleJob(ctx, job.ID, job.Kind, job.Payload)
 		}),
 	}
-}
-
-func HandleGithubJob(ctx context.Context, job Job) error {
-	return nil
 }
