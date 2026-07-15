@@ -8,6 +8,9 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/workers/internal/repository/embedder"
+	"github.com/briheet/kizuna/workers/internal/services"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -19,10 +22,15 @@ func NewDiscordWorker(
 	logger *logger.Logger,
 	client *providers.Client,
 ) Worker {
+	graphRepo := cockroachdb.NewGraphRepository(dbClient)
+	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
+	embedderService := services.NewEmbedderService(embedderRepo)
+	discordService := services.NewDiscordService(graphRepo, client.Discord(), embedderService)
+
 	return &JobWorker{
 		ID:         uuid.New(),
 		WorkerName: "discord-ingestion-worker",
-		Kind:       "discord.ingest",
+		Kind:       "",
 		Queue:      string(WorkerCategoryDiscord),
 		Client:     dbClient,
 		Logger:     logger,
@@ -35,7 +43,7 @@ func NewDiscordWorker(
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
 			logger.Info("handling discord job", zap.String("job_id", job.ID.String()))
-			return nil
+			return discordService.HandleJob(ctx, job.ID, job.Kind, job.Payload)
 		}),
 	}
 }

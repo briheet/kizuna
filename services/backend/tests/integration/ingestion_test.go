@@ -10,7 +10,9 @@ import (
 	"github.com/briheet/kizuna/backend/internal/api"
 	"github.com/briheet/kizuna/backend/internal/config"
 	"github.com/briheet/kizuna/backend/internal/logger"
+	"github.com/briheet/kizuna/backend/internal/types"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,8 +41,11 @@ func TestCreateIngestionJobs(t *testing.T) {
 			sourceLink: "https://github.com/golang/go",
 			scopes:     []string{"issues", "pull_requests"},
 			config: map[string]any{
-				"owner": "golang",
-				"repo":  "go",
+				"owner":     "golang",
+				"repo":      "go",
+				"limit":     100,
+				"page_size": 50,
+				"page":      1,
 			},
 			expectedKind: []string{"github.issues.ingest", "github.pull_requests.ingest"},
 			expectedQ:    "github",
@@ -54,6 +59,8 @@ func TestCreateIngestionJobs(t *testing.T) {
 			config: map[string]any{
 				"team_id":    "T123",
 				"channel_id": "C123",
+				"limit":      100,
+				"page_size":  50,
 			},
 			expectedKind: []string{"slack.channels.ingest", "slack.messages.ingest"},
 			expectedQ:    "slack",
@@ -67,6 +74,8 @@ func TestCreateIngestionJobs(t *testing.T) {
 			config: map[string]any{
 				"guild_id":   "123",
 				"channel_id": "456",
+				"limit":      100,
+				"page_size":  50,
 			},
 			expectedKind: []string{"discord.channels.ingest", "discord.messages.ingest"},
 			expectedQ:    "discord",
@@ -174,4 +183,63 @@ func TestCreateIngestionJobs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJobsStatus(t *testing.T) {
+	db := setupDB(t)
+	db.Restore(t)
+
+	app := api.NewApi(t.Context(), &config.Config{}, logger.NewNopLogger(), db.Client)
+	topicID := uuid.New().String()
+
+	body, err := json.Marshal(map[string]any{
+		"topic_id":    topicID,
+		"source_type": "github",
+		"name":        "golang/go",
+		"source_link": "https://github.com/golang/go",
+		"scope":       []string{"issues", "pull_requests"},
+		"config": map[string]any{
+			"owner":     "golang",
+			"repo":      "go",
+			"limit":     100,
+			"page_size": 50,
+			"page":      1,
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/createJobs", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	app.Routes().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	err = db.Client.ExecuteTx(t.Context(), func(tx pgx.Tx) error {
+		_, err := tx.Exec(t.Context(), `
+			update jobs
+			set state = 'discarded', attempt = max_attempt, attempted_at = now(), updated_at = now()
+			where kind = 'github.issues.ingest';
+		`)
+		return err
+	})
+	require.NoError(t, err)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/jobsStatus?topic_id="+topicID+"&source_type=github", nil)
+	rec = httptest.NewRecorder()
+	app.Routes().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var resp types.JobsStatusResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+
+	counts := map[string]int{}
+	for _, count := range resp.Counts {
+		counts[count.State] = count.Count
+	}
+
+	require.Equal(t, 1, counts["available"])
+	require.Equal(t, 1, counts["discarded"])
+	require.Len(t, resp.RecentFailures, 1)
+	require.Equal(t, "github.issues.ingest", resp.RecentFailures[0].Kind)
+	require.Equal(t, "discarded", resp.RecentFailures[0].State)
+	require.Equal(t, "github", resp.RecentFailures[0].Queue)
 }

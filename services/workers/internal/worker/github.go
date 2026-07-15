@@ -22,7 +22,7 @@ func NewGithubWorker(
 	logger *logger.Logger,
 	client *providers.Client,
 ) Worker {
-	githubRepo := cockroachdb.NewGithubRepository(dbClient)
+	githubRepo := cockroachdb.NewGraphRepository(dbClient)
 	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
 	embedderService := services.NewEmbedderService(embedderRepo)
 	githubService := services.NewGithubService(githubRepo, client.Github(), embedderService)

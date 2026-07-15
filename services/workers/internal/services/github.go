@@ -14,7 +14,7 @@ import (
 )
 
 type GithubService struct {
-	repo     repository.GithubRepository
+	repo     repository.GraphRepository
 	client   *githubprovider.Client
 	embedder *EmbedderService
 }
@@ -29,12 +29,15 @@ type GithubJobPayload struct {
 }
 
 type GithubJobConfig struct {
-	Owner string `json:"owner"`
-	Repo  string `json:"repo"`
-	Since string `json:"since"`
+	Owner    string `json:"owner"`
+	Repo     string `json:"repo"`
+	Since    string `json:"since"`
+	Limit    int    `json:"limit"`
+	PageSize int    `json:"page_size"`
+	Page     int    `json:"page"`
 }
 
-func NewGithubService(repo repository.GithubRepository, client *githubprovider.Client, embedder *EmbedderService) *GithubService {
+func NewGithubService(repo repository.GraphRepository, client *githubprovider.Client, embedder *EmbedderService) *GithubService {
 	return &GithubService{
 		repo:     repo,
 		client:   client,
@@ -53,8 +56,9 @@ func (s *GithubService) HandleJob(ctx context.Context, jobID uuid.UUID, kind str
 		return fmt.Errorf("parse github topic id: %w", err)
 	}
 
-	sourceID, err := s.repo.UpsertDataSource(ctx, repository.GithubDataSourceInput{
+	sourceID, err := s.repo.UpsertDataSource(ctx, repository.DataSourceInput{
 		TopicID:    topicID,
+		SourceType: "github",
 		Name:       p.Name,
 		ExternalID: fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo),
 		SourceLink: p.SourceLink,
@@ -86,10 +90,13 @@ func (s *GithubService) handleRepository(ctx context.Context, sourceID uuid.UUID
 		return err
 	}
 
-	props, _ := json.Marshal(repo)
-	return s.saveGithubGraph(ctx, sourceID, repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{{
-			Node: repository.GithubGraphNodeInput{
+	props, err := json.Marshal(repo)
+	if err != nil {
+		return err
+	}
+	return s.saveGraph(ctx, sourceID, repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{{
+			Node: repository.GraphNodeInput{
 				NodeType:   "github_repository",
 				ExternalID: fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo),
 				SourceLink: repo.GetHTMLURL(),
@@ -97,12 +104,19 @@ func (s *GithubService) handleRepository(ctx context.Context, sourceID uuid.UUID
 				Path:       repo.GetFullName(),
 				Properties: props,
 			},
-			Chunks: []repository.GithubChunkInput{{Index: 0, Content: repo.GetDescription()}},
+			Chunks: []repository.ChunkInput{{Index: 0, Content: repo.GetDescription()}},
 		}},
 	})
 }
 
 func (s *GithubService) handleIssues(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {
+	if p.Config.PageSize <= 0 {
+		return fmt.Errorf("github page_size is required")
+	}
+	if p.Config.Limit <= 0 {
+		return fmt.Errorf("github limit is required")
+	}
+
 	var since time.Time
 	if p.Config.Since != "" {
 		parsed, err := time.Parse(time.RFC3339, p.Config.Since)
@@ -112,57 +126,77 @@ func (s *GithubService) handleIssues(ctx context.Context, sourceID uuid.UUID, p 
 		since = parsed
 	}
 
-	issues, _, err := s.client.ListIssues(ctx, githubprovider.ListIssuesRequest{
-		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
-		State:       "all",
-		Since:       since,
-		Page:        1,
-		PerPage:     100,
-	})
-	if err != nil {
-		return err
+	page := p.Config.Page
+	if page == 0 {
+		page = 1
 	}
+	remaining := p.Config.Limit
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
-
-	// Fetch and build each issue graph concurrently, but persist each issue as
-	// its own transaction so the job can fail/retry without one huge DB write.
-	for _, issue := range issues {
-		if issue.IsPullRequest() {
-			continue
+	for remaining > 0 {
+		pageSize := p.Config.PageSize
+		if remaining < pageSize {
+			pageSize = remaining
 		}
 
-		issue := issue
-		g.Go(func() error {
-			return s.handleIssue(ctx, sourceID, p, issue)
+		issues, resp, err := s.client.ListIssues(ctx, githubprovider.ListIssuesRequest{
+			RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
+			State:       "all",
+			Since:       since,
+			Page:        page,
+			PerPage:     pageSize,
 		})
+		if err != nil {
+			return err
+		}
+		if len(issues) == 0 {
+			return nil
+		}
+
+		processed := 0
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(10)
+
+		// Fetch and build each issue graph concurrently, but persist each issue as
+		// its own transaction so the job can fail/retry without one huge DB write.
+		for _, issue := range issues {
+			if issue.IsPullRequest() {
+				continue
+			}
+			processed++
+
+			issue := issue
+			g.Go(func() error {
+				return s.handleIssue(ctx, sourceID, p, issue)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+
+		remaining -= processed
+		if resp == nil || resp.NextPage == 0 || len(issues) < pageSize {
+			return nil
+		}
+		page = resp.NextPage
 	}
 
-	return g.Wait()
+	return nil
 }
 
 func (s *GithubService) handleIssue(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload, issue *githubprovider.Issue) error {
-	comments, _, err := s.client.ListIssueComments(ctx, githubprovider.IssueRequest{
-		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
-		Number:      issue.GetNumber(),
-		Page:        1,
-		PerPage:     100,
-	})
+	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
+	issueExternalID := fmt.Sprintf("%s/issues/%d", repoExternalID, issue.GetNumber())
+	issueProps, err := json.Marshal(issue)
 	if err != nil {
 		return err
 	}
 
-	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
-	issueExternalID := fmt.Sprintf("%s/issues/%d", repoExternalID, issue.GetNumber())
-	issueProps, _ := json.Marshal(issue)
-
 	// Build the deterministic subgraph for one issue: repo -> issue -> comments.
 	// The repo node is included so edge endpoints are resolved from this graph input.
-	graph := repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{
+	graph := repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_repository",
 					ExternalID: repoExternalID,
 					SourceLink: p.SourceLink,
@@ -171,7 +205,7 @@ func (s *GithubService) handleIssue(ctx context.Context, sourceID uuid.UUID, p G
 				},
 			},
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_issue",
 					ExternalID: issueExternalID,
 					SourceLink: issue.GetHTMLURL(),
@@ -179,10 +213,10 @@ func (s *GithubService) handleIssue(ctx context.Context, sourceID uuid.UUID, p G
 					Path:       fmt.Sprintf("issues/%d", issue.GetNumber()),
 					Properties: issueProps,
 				},
-				Chunks: []repository.GithubChunkInput{{Index: 0, Content: issue.GetTitle() + "\n\n" + issue.GetBody()}},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: issue.GetTitle() + "\n\n" + issue.GetBody()}},
 			},
 		},
-		Edges: []repository.GithubGraphEdgeInput{{
+		Edges: []repository.GraphEdgeInput{{
 			FromExternalID: repoExternalID,
 			ToExternalID:   issueExternalID,
 			EdgeType:       "has_issue",
@@ -191,54 +225,105 @@ func (s *GithubService) handleIssue(ctx context.Context, sourceID uuid.UUID, p G
 		}},
 	}
 
-	for i, comment := range comments {
-		commentExternalID := fmt.Sprintf("%s/comments/%d", issueExternalID, comment.GetID())
-		props, _ := json.Marshal(comment)
-		graph.Nodes = append(graph.Nodes, repository.GithubGraphNodeWithChunks{
-			Node: repository.GithubGraphNodeInput{
-				NodeType:   "github_issue_comment",
-				ExternalID: commentExternalID,
-				SourceLink: comment.GetHTMLURL(),
-				Title:      fmt.Sprintf("Issue #%d comment", issue.GetNumber()),
-				Path:       fmt.Sprintf("issues/%d/comments/%d", issue.GetNumber(), comment.GetID()),
-				Properties: props,
-			},
-			Chunks: []repository.GithubChunkInput{{Index: i, Content: comment.GetBody()}},
+	page := 1
+	for {
+		comments, resp, err := s.client.ListIssueComments(ctx, githubprovider.IssueRequest{
+			RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
+			Number:      issue.GetNumber(),
+			Page:        page,
+			PerPage:     p.Config.PageSize,
 		})
-		graph.Edges = append(graph.Edges, repository.GithubGraphEdgeInput{
-			FromExternalID: issueExternalID,
-			ToExternalID:   commentExternalID,
-			EdgeType:       "has_comment",
-			EdgeScope:      "github",
-			Confidence:     1,
-		})
+		if err != nil {
+			return err
+		}
+		for _, comment := range comments {
+			commentExternalID := fmt.Sprintf("%s/comments/%d", issueExternalID, comment.GetID())
+			props, err := json.Marshal(comment)
+			if err != nil {
+				return err
+			}
+			graph.Nodes = append(graph.Nodes, repository.GraphNodeWithChunks{
+				Node: repository.GraphNodeInput{
+					NodeType:   "github_issue_comment",
+					ExternalID: commentExternalID,
+					SourceLink: comment.GetHTMLURL(),
+					Title:      fmt.Sprintf("Issue #%d comment", issue.GetNumber()),
+					Path:       fmt.Sprintf("issues/%d/comments/%d", issue.GetNumber(), comment.GetID()),
+					Properties: props,
+				},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: comment.GetBody()}},
+			})
+			graph.Edges = append(graph.Edges, repository.GraphEdgeInput{
+				FromExternalID: issueExternalID,
+				ToExternalID:   commentExternalID,
+				EdgeType:       "has_comment",
+				EdgeScope:      "github",
+				Confidence:     1,
+			})
+		}
+		if resp == nil || resp.NextPage == 0 || len(comments) < p.Config.PageSize {
+			break
+		}
+		page = resp.NextPage
 	}
 
-	return s.saveGithubGraph(ctx, sourceID, graph)
+	return s.saveGraph(ctx, sourceID, graph)
 }
 
 func (s *GithubService) handlePullRequests(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {
-	pulls, _, err := s.client.ListPullRequests(ctx, githubprovider.ListPullRequestsRequest{
-		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
-		State:       "all",
-		Page:        1,
-		PerPage:     100,
-	})
-	if err != nil {
-		return err
+	if p.Config.PageSize <= 0 {
+		return fmt.Errorf("github page_size is required")
+	}
+	if p.Config.Limit <= 0 {
+		return fmt.Errorf("github limit is required")
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
+	page := p.Config.Page
+	if page == 0 {
+		page = 1
+	}
+	remaining := p.Config.Limit
 
-	for _, pr := range pulls {
-		pr := pr
-		g.Go(func() error {
-			return s.handlePullRequest(ctx, sourceID, p, pr)
+	for remaining > 0 {
+		pageSize := p.Config.PageSize
+		if remaining < pageSize {
+			pageSize = remaining
+		}
+
+		pulls, resp, err := s.client.ListPullRequests(ctx, githubprovider.ListPullRequestsRequest{
+			RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
+			State:       "all",
+			Page:        page,
+			PerPage:     pageSize,
 		})
+		if err != nil {
+			return err
+		}
+		if len(pulls) == 0 {
+			return nil
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(10)
+
+		for _, pr := range pulls {
+			pr := pr
+			g.Go(func() error {
+				return s.handlePullRequest(ctx, sourceID, p, pr)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+
+		remaining -= len(pulls)
+		if resp == nil || resp.NextPage == 0 || len(pulls) < pageSize {
+			return nil
+		}
+		page = resp.NextPage
 	}
 
-	return g.Wait()
+	return nil
 }
 
 func (s *GithubService) handlePullRequest(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload, pr *githubprovider.PullRequest) error {
@@ -247,29 +332,19 @@ func (s *GithubService) handlePullRequest(ctx context.Context, sourceID uuid.UUI
 		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
 		Number:      number,
 		Page:        1,
-		PerPage:     100,
-	}
-
-	comments, _, err := s.client.ListPullRequestComments(ctx, req)
-	if err != nil {
-		return err
-	}
-	reviews, _, err := s.client.ListPullRequestReviews(ctx, req)
-	if err != nil {
-		return err
-	}
-	commits, _, err := s.client.ListPullRequestCommits(ctx, req)
-	if err != nil {
-		return err
+		PerPage:     p.Config.PageSize,
 	}
 
 	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
 	prExternalID := fmt.Sprintf("%s/pulls/%d", repoExternalID, number)
-	props, _ := json.Marshal(pr)
-	graph := repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{
+	props, err := json.Marshal(pr)
+	if err != nil {
+		return err
+	}
+	graph := repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_repository",
 					ExternalID: repoExternalID,
 					SourceLink: p.SourceLink,
@@ -278,7 +353,7 @@ func (s *GithubService) handlePullRequest(ctx context.Context, sourceID uuid.UUI
 				},
 			},
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_pull_request",
 					ExternalID: prExternalID,
 					SourceLink: pr.GetHTMLURL(),
@@ -286,10 +361,10 @@ func (s *GithubService) handlePullRequest(ctx context.Context, sourceID uuid.UUI
 					Path:       fmt.Sprintf("pulls/%d", number),
 					Properties: props,
 				},
-				Chunks: []repository.GithubChunkInput{{Index: 0, Content: pr.GetTitle() + "\n\n" + pr.GetBody()}},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: pr.GetTitle() + "\n\n" + pr.GetBody()}},
 			},
 		},
-		Edges: []repository.GithubGraphEdgeInput{{
+		Edges: []repository.GraphEdgeInput{{
 			FromExternalID: repoExternalID,
 			ToExternalID:   prExternalID,
 			EdgeType:       "has_pull_request",
@@ -298,83 +373,131 @@ func (s *GithubService) handlePullRequest(ctx context.Context, sourceID uuid.UUI
 		}},
 	}
 
-	for i, comment := range comments {
-		props, _ := json.Marshal(comment)
-		commentExternalID := fmt.Sprintf("%s/comments/%d", prExternalID, comment.GetID())
-		graph.Nodes = append(graph.Nodes, repository.GithubGraphNodeWithChunks{
-			Node: repository.GithubGraphNodeInput{
-				NodeType:   "github_pull_request_comment",
-				ExternalID: commentExternalID,
-				SourceLink: comment.GetHTMLURL(),
-				Title:      fmt.Sprintf("PR #%d comment", number),
-				Path:       fmt.Sprintf("pulls/%d/comments/%d", number, comment.GetID()),
-				Properties: props,
-			},
-			Chunks: []repository.GithubChunkInput{{Index: i, Content: comment.GetBody()}},
-		})
-		graph.Edges = append(graph.Edges, repository.GithubGraphEdgeInput{
-			FromExternalID: prExternalID,
-			ToExternalID:   commentExternalID,
-			EdgeType:       "has_comment",
-			EdgeScope:      "github",
-			Confidence:     1,
-		})
-	}
-
-	for i, review := range reviews {
-		props, _ := json.Marshal(review)
-		reviewExternalID := fmt.Sprintf("%s/reviews/%d", prExternalID, review.GetID())
-		graph.Nodes = append(graph.Nodes, repository.GithubGraphNodeWithChunks{
-			Node: repository.GithubGraphNodeInput{
-				NodeType:   "github_pull_request_review",
-				ExternalID: reviewExternalID,
-				SourceLink: review.GetHTMLURL(),
-				Title:      fmt.Sprintf("PR #%d review", number),
-				Path:       fmt.Sprintf("pulls/%d/reviews/%d", number, review.GetID()),
-				Properties: props,
-			},
-			Chunks: []repository.GithubChunkInput{{Index: i, Content: review.GetBody()}},
-		})
-		graph.Edges = append(graph.Edges, repository.GithubGraphEdgeInput{
-			FromExternalID: prExternalID,
-			ToExternalID:   reviewExternalID,
-			EdgeType:       "has_review",
-			EdgeScope:      "github",
-			Confidence:     1,
-		})
-	}
-
-	for i, commit := range commits {
-		message := ""
-		if commit.Commit != nil {
-			message = commit.Commit.GetMessage()
+	for {
+		comments, resp, err := s.client.ListPullRequestComments(ctx, req)
+		if err != nil {
+			return err
 		}
-		props, _ := json.Marshal(commit)
-		commitExternalID := fmt.Sprintf("%s/commits/%s", prExternalID, commit.GetSHA())
-		graph.Nodes = append(graph.Nodes, repository.GithubGraphNodeWithChunks{
-			Node: repository.GithubGraphNodeInput{
-				NodeType:   "github_pull_request_commit",
-				ExternalID: commitExternalID,
-				SourceLink: commit.GetHTMLURL(),
-				Title:      commit.GetSHA(),
-				Path:       fmt.Sprintf("pulls/%d/commits/%s", number, commit.GetSHA()),
-				Properties: props,
-			},
-			Chunks: []repository.GithubChunkInput{{Index: i, Content: message}},
-		})
-		graph.Edges = append(graph.Edges, repository.GithubGraphEdgeInput{
-			FromExternalID: prExternalID,
-			ToExternalID:   commitExternalID,
-			EdgeType:       "has_commit",
-			EdgeScope:      "github",
-			Confidence:     1,
-		})
+		for _, comment := range comments {
+			props, err := json.Marshal(comment)
+			if err != nil {
+				return err
+			}
+			commentExternalID := fmt.Sprintf("%s/comments/%d", prExternalID, comment.GetID())
+			graph.Nodes = append(graph.Nodes, repository.GraphNodeWithChunks{
+				Node: repository.GraphNodeInput{
+					NodeType:   "github_pull_request_comment",
+					ExternalID: commentExternalID,
+					SourceLink: comment.GetHTMLURL(),
+					Title:      fmt.Sprintf("PR #%d comment", number),
+					Path:       fmt.Sprintf("pulls/%d/comments/%d", number, comment.GetID()),
+					Properties: props,
+				},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: comment.GetBody()}},
+			})
+			graph.Edges = append(graph.Edges, repository.GraphEdgeInput{
+				FromExternalID: prExternalID,
+				ToExternalID:   commentExternalID,
+				EdgeType:       "has_comment",
+				EdgeScope:      "github",
+				Confidence:     1,
+			})
+		}
+		if resp == nil || resp.NextPage == 0 || len(comments) < p.Config.PageSize {
+			break
+		}
+		req.Page = resp.NextPage
 	}
 
-	return s.saveGithubGraph(ctx, sourceID, graph)
+	req.Page = 1
+	for {
+		reviews, resp, err := s.client.ListPullRequestReviews(ctx, req)
+		if err != nil {
+			return err
+		}
+		for _, review := range reviews {
+			props, err := json.Marshal(review)
+			if err != nil {
+				return err
+			}
+			reviewExternalID := fmt.Sprintf("%s/reviews/%d", prExternalID, review.GetID())
+			graph.Nodes = append(graph.Nodes, repository.GraphNodeWithChunks{
+				Node: repository.GraphNodeInput{
+					NodeType:   "github_pull_request_review",
+					ExternalID: reviewExternalID,
+					SourceLink: review.GetHTMLURL(),
+					Title:      fmt.Sprintf("PR #%d review", number),
+					Path:       fmt.Sprintf("pulls/%d/reviews/%d", number, review.GetID()),
+					Properties: props,
+				},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: review.GetBody()}},
+			})
+			graph.Edges = append(graph.Edges, repository.GraphEdgeInput{
+				FromExternalID: prExternalID,
+				ToExternalID:   reviewExternalID,
+				EdgeType:       "has_review",
+				EdgeScope:      "github",
+				Confidence:     1,
+			})
+		}
+		if resp == nil || resp.NextPage == 0 || len(reviews) < p.Config.PageSize {
+			break
+		}
+		req.Page = resp.NextPage
+	}
+
+	req.Page = 1
+	for {
+		commits, resp, err := s.client.ListPullRequestCommits(ctx, req)
+		if err != nil {
+			return err
+		}
+		for _, commit := range commits {
+			message := ""
+			if commit.Commit != nil {
+				message = commit.Commit.GetMessage()
+			}
+			props, err := json.Marshal(commit)
+			if err != nil {
+				return err
+			}
+			commitExternalID := fmt.Sprintf("%s/commits/%s", prExternalID, commit.GetSHA())
+			graph.Nodes = append(graph.Nodes, repository.GraphNodeWithChunks{
+				Node: repository.GraphNodeInput{
+					NodeType:   "github_pull_request_commit",
+					ExternalID: commitExternalID,
+					SourceLink: commit.GetHTMLURL(),
+					Title:      commit.GetSHA(),
+					Path:       fmt.Sprintf("pulls/%d/commits/%s", number, commit.GetSHA()),
+					Properties: props,
+				},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: message}},
+			})
+			graph.Edges = append(graph.Edges, repository.GraphEdgeInput{
+				FromExternalID: prExternalID,
+				ToExternalID:   commitExternalID,
+				EdgeType:       "has_commit",
+				EdgeScope:      "github",
+				Confidence:     1,
+			})
+		}
+		if resp == nil || resp.NextPage == 0 || len(commits) < p.Config.PageSize {
+			break
+		}
+		req.Page = resp.NextPage
+	}
+
+	return s.saveGraph(ctx, sourceID, graph)
 }
 
 func (s *GithubService) handleCommits(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {
+	if p.Config.PageSize <= 0 {
+		return fmt.Errorf("github page_size is required")
+	}
+	if p.Config.Limit <= 0 {
+		return fmt.Errorf("github limit is required")
+	}
+
 	var since time.Time
 	if p.Config.Since != "" {
 		parsed, err := time.Parse(time.RFC3339, p.Config.Since)
@@ -384,27 +507,52 @@ func (s *GithubService) handleCommits(ctx context.Context, sourceID uuid.UUID, p
 		since = parsed
 	}
 
-	commits, _, err := s.client.ListCommits(ctx, githubprovider.ListCommitsRequest{
-		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
-		Since:       since,
-		Page:        1,
-		PerPage:     100,
-	})
-	if err != nil {
-		return err
+	page := p.Config.Page
+	if page == 0 {
+		page = 1
 	}
+	remaining := p.Config.Limit
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
+	for remaining > 0 {
+		pageSize := p.Config.PageSize
+		if remaining < pageSize {
+			pageSize = remaining
+		}
 
-	for _, commit := range commits {
-		commit := commit
-		g.Go(func() error {
-			return s.handleCommit(ctx, sourceID, p, commit)
+		commits, resp, err := s.client.ListCommits(ctx, githubprovider.ListCommitsRequest{
+			RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
+			Since:       since,
+			Page:        page,
+			PerPage:     pageSize,
 		})
+		if err != nil {
+			return err
+		}
+		if len(commits) == 0 {
+			return nil
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(10)
+
+		for _, commit := range commits {
+			commit := commit
+			g.Go(func() error {
+				return s.handleCommit(ctx, sourceID, p, commit)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+
+		remaining -= len(commits)
+		if resp == nil || resp.NextPage == 0 || len(commits) < pageSize {
+			return nil
+		}
+		page = resp.NextPage
 	}
 
-	return g.Wait()
+	return nil
 }
 
 func (s *GithubService) handleCommit(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload, commit *githubprovider.RepositoryCommit) error {
@@ -415,12 +563,15 @@ func (s *GithubService) handleCommit(ctx context.Context, sourceID uuid.UUID, p 
 
 	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
 	commitExternalID := fmt.Sprintf("%s/commits/%s", repoExternalID, commit.GetSHA())
-	props, _ := json.Marshal(commit)
+	props, err := json.Marshal(commit)
+	if err != nil {
+		return err
+	}
 
-	return s.saveGithubGraph(ctx, sourceID, repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{
+	return s.saveGraph(ctx, sourceID, repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_repository",
 					ExternalID: repoExternalID,
 					SourceLink: p.SourceLink,
@@ -429,7 +580,7 @@ func (s *GithubService) handleCommit(ctx context.Context, sourceID uuid.UUID, p 
 				},
 			},
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_commit",
 					ExternalID: commitExternalID,
 					SourceLink: commit.GetHTMLURL(),
@@ -437,10 +588,10 @@ func (s *GithubService) handleCommit(ctx context.Context, sourceID uuid.UUID, p 
 					Path:       fmt.Sprintf("commits/%s", commit.GetSHA()),
 					Properties: props,
 				},
-				Chunks: []repository.GithubChunkInput{{Index: 0, Content: message}},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: message}},
 			},
 		},
-		Edges: []repository.GithubGraphEdgeInput{{
+		Edges: []repository.GraphEdgeInput{{
 			FromExternalID: repoExternalID,
 			ToExternalID:   commitExternalID,
 			EdgeType:       "has_commit",
@@ -451,37 +602,72 @@ func (s *GithubService) handleCommit(ctx context.Context, sourceID uuid.UUID, p 
 }
 
 func (s *GithubService) handleReleases(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {
-	releases, _, err := s.client.ListReleases(ctx, githubprovider.ListReleasesRequest{
-		RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
-		Page:        1,
-		PerPage:     100,
-	})
-	if err != nil {
-		return err
+	if p.Config.PageSize <= 0 {
+		return fmt.Errorf("github page_size is required")
+	}
+	if p.Config.Limit <= 0 {
+		return fmt.Errorf("github limit is required")
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(10)
+	page := p.Config.Page
+	if page == 0 {
+		page = 1
+	}
+	remaining := p.Config.Limit
 
-	for _, release := range releases {
-		release := release
-		g.Go(func() error {
-			return s.handleRelease(ctx, sourceID, p, release)
+	for remaining > 0 {
+		pageSize := p.Config.PageSize
+		if remaining < pageSize {
+			pageSize = remaining
+		}
+
+		releases, resp, err := s.client.ListReleases(ctx, githubprovider.ListReleasesRequest{
+			RepoRequest: githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo},
+			Page:        page,
+			PerPage:     pageSize,
 		})
+		if err != nil {
+			return err
+		}
+		if len(releases) == 0 {
+			return nil
+		}
+
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(10)
+
+		for _, release := range releases {
+			release := release
+			g.Go(func() error {
+				return s.handleRelease(ctx, sourceID, p, release)
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+
+		remaining -= len(releases)
+		if resp == nil || resp.NextPage == 0 || len(releases) < pageSize {
+			return nil
+		}
+		page = resp.NextPage
 	}
 
-	return g.Wait()
+	return nil
 }
 
 func (s *GithubService) handleRelease(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload, release *githubprovider.RepositoryRelease) error {
 	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
 	releaseExternalID := fmt.Sprintf("%s/releases/%d", repoExternalID, release.GetID())
-	props, _ := json.Marshal(release)
+	props, err := json.Marshal(release)
+	if err != nil {
+		return err
+	}
 
-	return s.saveGithubGraph(ctx, sourceID, repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{
+	return s.saveGraph(ctx, sourceID, repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_repository",
 					ExternalID: repoExternalID,
 					SourceLink: p.SourceLink,
@@ -490,7 +676,7 @@ func (s *GithubService) handleRelease(ctx context.Context, sourceID uuid.UUID, p
 				},
 			},
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_release",
 					ExternalID: releaseExternalID,
 					SourceLink: release.GetHTMLURL(),
@@ -498,10 +684,10 @@ func (s *GithubService) handleRelease(ctx context.Context, sourceID uuid.UUID, p
 					Path:       fmt.Sprintf("releases/%d", release.GetID()),
 					Properties: props,
 				},
-				Chunks: []repository.GithubChunkInput{{Index: 0, Content: release.GetName() + "\n\n" + release.GetBody()}},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: release.GetName() + "\n\n" + release.GetBody()}},
 			},
 		},
-		Edges: []repository.GithubGraphEdgeInput{{
+		Edges: []repository.GraphEdgeInput{{
 			FromExternalID: repoExternalID,
 			ToExternalID:   releaseExternalID,
 			EdgeType:       "has_release",
@@ -511,7 +697,7 @@ func (s *GithubService) handleRelease(ctx context.Context, sourceID uuid.UUID, p
 	})
 }
 
-func (s *GithubService) saveGithubGraph(ctx context.Context, sourceID uuid.UUID, graph repository.GithubGraphInput) error {
+func (s *GithubService) saveGraph(ctx context.Context, sourceID uuid.UUID, graph repository.GraphInput) error {
 	// Embed all chunk text after the graph is built so chunk indexes and
 	// embeddings stay aligned before the single repo transaction.
 	texts := make([]string, 0)
@@ -523,7 +709,7 @@ func (s *GithubService) saveGithubGraph(ctx context.Context, sourceID uuid.UUID,
 		}
 	}
 	if len(texts) == 0 {
-		return s.repo.SaveGithubGraph(ctx, sourceID, graph)
+		return s.repo.SaveGraph(ctx, sourceID, graph)
 	}
 
 	embeddings, err := s.embedder.EmbedDocuments(ctx, texts)
@@ -542,5 +728,5 @@ func (s *GithubService) saveGithubGraph(ctx context.Context, sourceID uuid.UUID,
 		}
 	}
 
-	return s.repo.SaveGithubGraph(ctx, sourceID, graph)
+	return s.repo.SaveGraph(ctx, sourceID, graph)
 }

@@ -90,6 +90,7 @@ CREATE TABLE "jobs" (
   "attempted_at" timestamptz,
   "completed_at" timestamptz,
   "leaseexpires_at" timestamptz,
+  "last_error" text,
   "created_at" timestamptz,
   "updated_at" timestamptz
 );

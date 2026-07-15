@@ -19,6 +19,13 @@ func NewIngestionService(repo repository.IngestionRepository) *IngestionService 
 	return &IngestionService{repo: repo}
 }
 
+func (s *IngestionService) JobsStatus(ctx context.Context, req types.JobsStatusRequest) (*types.JobsStatusResponse, error) {
+	if req.Limit == 0 {
+		req.Limit = 10
+	}
+	return s.repo.JobsStatus(ctx, req)
+}
+
 // Here need to birfurcate into different different resources
 // These would include issues, pull requests, commits, releases
 func (s *IngestionService) CreateGithubJobs(ctx context.Context, req *types.CreateIngestionRequest, cfg *types.CreateGithubJobsConfig) error {
@@ -116,6 +123,7 @@ func (s *IngestionService) CreateDiscordJobs(ctx context.Context, req *types.Cre
 
 	for _, scope := range req.Scope {
 		var kind string
+		jobCfg := *cfg
 		switch domain.JobScopeDiscord(scope) {
 		case domain.JobScopeDiscordGuild:
 			kind = "discord.guild.ingest"
@@ -139,7 +147,7 @@ func (s *IngestionService) CreateDiscordJobs(ctx context.Context, req *types.Cre
 			Name:       req.Name,
 			SourceLink: req.SourceLink,
 			Scope:      scope,
-			Config:     *cfg,
+			Config:     jobCfg,
 		})
 		if err != nil {
 			return err

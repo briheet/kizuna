@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/briheet/kizuna/backend/internal/domain"
 	"github.com/briheet/kizuna/backend/internal/types"
@@ -152,5 +153,39 @@ func (a *API) createJobs(w http.ResponseWriter, r *http.Request) {
 // This method will help us fetch jobs status
 // Whether a job is in process, failed, ingested, etc
 func (a *API) jobsStatus(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	req := types.JobsStatusRequest{
+		TopicID:    query.Get("topic_id"),
+		SourceType: query.Get("source_type"),
+		State:      query.Get("state"),
+	}
 
+	if value := query.Get("limit"); value != "" {
+		limit, err := strconv.Atoi(value)
+		if err != nil {
+			http.Error(w, "invalid limit", http.StatusBadRequest)
+			return
+		}
+		req.Limit = limit
+	}
+
+	if err := a.validate.Struct(req); err != nil {
+		a.logger.Error("error validating jobs status request", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+
+	resp, err := a.ingestionService.JobsStatus(r.Context(), req)
+	if err != nil {
+		a.logger.Error("error fetching jobs status", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		a.logger.Error("encode jobs status response failed", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }

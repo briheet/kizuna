@@ -17,9 +17,12 @@ type CreateIngestionRequest struct {
 
 // Particular config of the repo
 type CreateGithubJobsConfig struct {
-	Owner string `json:"owner" validate:"required"`
-	Repo  string `json:"repo" validate:"required"`
-	Since string `json:"since" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
+	Owner    string `json:"owner" validate:"required"`
+	Repo     string `json:"repo" validate:"required"`
+	Since    string `json:"since" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
+	Limit    int    `json:"limit" validate:"required,min=1,max=10000"`
+	PageSize int    `json:"page_size" validate:"required,min=1,max=100"`
+	Page     int    `json:"page" validate:"required,min=1"`
 }
 
 type GithubIngestionJobPayload struct {
@@ -35,6 +38,10 @@ type CreateSlackJobsConfig struct {
 	TeamID    string `json:"team_id" validate:"required"`
 	ChannelID string `json:"channel_id" validate:"omitempty"`
 	Since     string `json:"since" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
+	Limit     int    `json:"limit" validate:"required,min=1,max=10000"`
+	PageSize  int    `json:"page_size" validate:"required,min=1,max=100"`
+	Cursor    string `json:"cursor" validate:"omitempty"`
+	Remaining int    `json:"remaining" validate:"omitempty,min=0,max=10000"`
 }
 
 type SlackIngestionJobPayload struct {
@@ -47,9 +54,13 @@ type SlackIngestionJobPayload struct {
 }
 
 type CreateDiscordJobsConfig struct {
-	GuildID   string `json:"guild_id" validate:"required"`
-	ChannelID string `json:"channel_id" validate:"omitempty"`
-	Since     string `json:"since" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
+	GuildID         string `json:"guild_id" validate:"required"`
+	ChannelID       string `json:"channel_id" validate:"omitempty"`
+	Since           string `json:"since" validate:"omitempty,datetime=2006-01-02T15:04:05Z07:00"`
+	Limit           int    `json:"limit" validate:"required,min=1,max=10000"`
+	PageSize        int    `json:"page_size" validate:"required,min=1,max=100"`
+	BeforeMessageID string `json:"before_message_id" validate:"omitempty"`
+	Remaining       int    `json:"remaining" validate:"omitempty,min=0,max=10000"`
 }
 
 type DiscordIngestionJobPayload struct {

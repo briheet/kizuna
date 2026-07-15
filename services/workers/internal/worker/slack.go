@@ -8,6 +8,9 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository/cockroachdb"
+	"github.com/briheet/kizuna/workers/internal/repository/embedder"
+	"github.com/briheet/kizuna/workers/internal/services"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -19,10 +22,15 @@ func NewSlackWorker(
 	logger *logger.Logger,
 	client *providers.Client,
 ) Worker {
+	graphRepo := cockroachdb.NewGraphRepository(dbClient)
+	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
+	embedderService := services.NewEmbedderService(embedderRepo)
+	slackService := services.NewSlackService(graphRepo, client.Slack(), embedderService)
+
 	return &JobWorker{
 		ID:         uuid.New(),
 		WorkerName: "slack-ingestion-worker",
-		Kind:       "slack.ingest",
+		Kind:       "",
 		Queue:      string(WorkerCategorySlack),
 		Client:     dbClient,
 		Logger:     logger,
@@ -35,7 +43,7 @@ func NewSlackWorker(
 		},
 		Handler: HandlerFunc(func(ctx context.Context, job Job) error {
 			logger.Info("handling slack job", zap.String("job_id", job.ID.String()))
-			return nil
+			return slackService.HandleJob(ctx, job.ID, job.Kind, job.Payload)
 		}),
 	}
 }
