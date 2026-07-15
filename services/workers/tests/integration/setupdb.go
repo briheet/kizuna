@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
-	"github.com/briheet/kizuna/backend/internal/cmd"
-	"github.com/briheet/kizuna/backend/internal/config"
-	"github.com/briheet/kizuna/backend/internal/db"
+	"github.com/briheet/kizuna/workers/internal/config"
+	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -16,35 +16,31 @@ import (
 )
 
 type BaseDB struct {
-	Db           *cockroachdb.CockroachDBContainer
-	Client       *db.Client
-	PGXURL       string
-	MigrationURL string
+	Db     *cockroachdb.CockroachDBContainer
+	Client *db.Client
+	PGXURL string
 }
 
 func setupDB(t *testing.T) *BaseDB {
 	t.Helper()
 	ctx := t.Context()
 
-	cockroachdbContainer, err := cockroachdb.Run(
+	container, err := cockroachdb.Run(
 		ctx,
 		"cockroachdb/cockroach:latest-v26.2",
 		cockroachdb.WithInsecure(),
 	)
 	t.Cleanup(func() {
-		if err := testcontainers.TerminateContainer(cockroachdbContainer); err != nil {
+		if err := testcontainers.TerminateContainer(container); err != nil {
 			log.Printf("failed to terminate container: %s", err)
 		}
 	})
-	if err != nil {
-		log.Printf("failed to start container: %s", err)
-		require.NoError(t, err)
-	}
-
-	host, err := cockroachdbContainer.Host(ctx)
 	require.NoError(t, err)
 
-	port, err := cockroachdbContainer.MappedPort(ctx, "26257/tcp")
+	host, err := container.Host(ctx)
+	require.NoError(t, err)
+
+	port, err := container.MappedPort(ctx, "26257/tcp")
 	require.NoError(t, err)
 
 	pgxURL := fmt.Sprintf(
@@ -52,23 +48,6 @@ func setupDB(t *testing.T) *BaseDB {
 		host,
 		port.Port(),
 	)
-
-	migrationURL := fmt.Sprintf(
-		"cockroachdb://root@%s:%s/defaultdb?sslmode=disable",
-		host,
-		port.Port(),
-	)
-
-	command := cmd.MigrateCmd(ctx)
-	command.SetArgs([]string{
-		"--filepath",
-		"file://../../migration",
-		"--dburl",
-		migrationURL,
-	})
-
-	err = command.Execute()
-	require.NoError(t, err)
 
 	client, err := db.NewClient(ctx, &config.Config{
 		Db: config.DbConfig{
@@ -80,11 +59,19 @@ func setupDB(t *testing.T) *BaseDB {
 		require.NoError(t, client.Close(context.Background()))
 	})
 
+	migration, err := os.ReadFile("../../../backend/migration/002_combined.up.sql")
+	require.NoError(t, err)
+
+	err = client.ExecuteTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, string(migration))
+		return err
+	})
+	require.NoError(t, err)
+
 	return &BaseDB{
-		Db:           cockroachdbContainer,
-		Client:       client,
-		PGXURL:       pgxURL,
-		MigrationURL: migrationURL,
+		Db:     container,
+		Client: client,
+		PGXURL: pgxURL,
 	}
 }
 

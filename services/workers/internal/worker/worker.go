@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/briheet/kizuna/workers/internal/config"
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
@@ -23,6 +24,7 @@ const (
 )
 
 type WorkerBuilder func(
+	config *config.Config,
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client) Worker
@@ -121,7 +123,8 @@ func (j *JobWorker) runJob(ctx context.Context, job Job) {
 	defer cancel()
 
 	if err := j.Handler.Handle(jobCtx, job); err != nil {
-		_, updateErr := j.Client.Conn().Exec(ctx, `
+		updateErr := j.Client.ExecuteTx(ctx, func(tx pgx.Tx) error {
+			_, err := tx.Exec(ctx, `
 			update jobs
 			set
 			state = case
@@ -135,6 +138,8 @@ func (j *JobWorker) runJob(ctx context.Context, job Job) {
 			updated_at = now()
 			where id = $1;
 		`, job.ID)
+			return err
+		})
 		if updateErr != nil {
 			j.Logger.Error("failed to mark job failed", zap.String("job_id", job.ID.String()), zap.Error(updateErr))
 		}
@@ -143,14 +148,17 @@ func (j *JobWorker) runJob(ctx context.Context, job Job) {
 		return
 	}
 
-	if _, err := j.Client.Conn().Exec(ctx, `
+	if err := j.Client.ExecuteTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
 		update jobs
 		set
 			state = 'completed',
 			completed_at = now(),
 			updated_at = now()
 		where id = $1;
-	`, job.ID); err != nil {
+	`, job.ID)
+		return err
+	}); err != nil {
 		j.Logger.Error("failed to mark job completed", zap.String("job_id", job.ID.String()), zap.Error(err))
 	}
 
@@ -165,7 +173,7 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
 	readQuery := `
 		select id from jobs where
 		queue = $1 and
-		kind = $2 and
+		($2 = '' or kind = $2) and
 		state = 'available' and
 		scheduled_at <= now()
 		order by priority desc,

@@ -30,6 +30,8 @@ CREATE TABLE "data_sources" (
   "updated_at" timestamptz NOT NULL
 );
 
+CREATE UNIQUE INDEX "data_sources_unique_source" ON "data_sources" ("topic_id", "source_type", "external_id");
+
 CREATE TABLE "graph_nodes" (
   "id" uuid PRIMARY KEY,
   "data_source_id" uuid NOT NULL,
@@ -45,6 +47,8 @@ CREATE TABLE "graph_nodes" (
   "updated_at" timestamptz NOT NULL
 );
 
+CREATE UNIQUE INDEX "graph_nodes_unique_external" ON "graph_nodes" ("data_source_id", "node_type", "external_id");
+
 CREATE TABLE "graph_edges" (
   "id" uuid PRIMARY KEY,
   "root_data_source_id" uuid NOT NULL,
@@ -59,14 +63,18 @@ CREATE TABLE "graph_edges" (
   "created_at" timestamptz NOT NULL
 );
 
+CREATE UNIQUE INDEX "graph_edges_unique_relation" ON "graph_edges" ("root_data_source_id", "from_node_id", "edge_type", "to_node_id");
+
 CREATE TABLE "chunks" (
   "id" uuid PRIMARY KEY,
   "graph_node_id" uuid NOT NULL,
   "chunk_index" int NOT NULL,
   "content" text NOT NULL,
-  "embedding" vector(1536),
+  "embedding" vector(768),
   "created_at" timestamptz NOT NULL
 );
+
+CREATE UNIQUE INDEX "chunks_unique_index" ON "chunks" ("graph_node_id", "chunk_index");
 
 ALTER TABLE "teams" ADD FOREIGN KEY ("organisation_id") REFERENCES "organisations" ("id") DEFERRABLE INITIALLY IMMEDIATE;
 

@@ -10,8 +10,9 @@ import (
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 type Config struct {
-	Api APIConfig `mapstructure:",squash" validate:"required"`
-	Db  DbConfig  `mapstructure:",squash" validate:"required"`
+	Api      APIConfig      `mapstructure:",squash" validate:"required"`
+	Db       DbConfig       `mapstructure:",squash" validate:"required"`
+	Embedder EmbedderConfig `mapstructure:",squash" validate:"required"`
 }
 
 type APIConfig struct {
@@ -24,6 +25,10 @@ type APIConfig struct {
 
 type DbConfig struct {
 	DatabaseURL string `mapstructure:"databaseurl" validate:"required"`
+}
+
+type EmbedderConfig struct {
+	BaseURL string `mapstructure:"embedder_base_url" validate:"required,url"`
 }
 
 func LoadConfig(ctx context.Context, path string) (*Config, error) {

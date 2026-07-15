@@ -13,6 +13,7 @@ type Config struct {
 	Confluence ConfluenceConfig `mapstructure:",squash" validate:"required"`
 	Db         DbConfig         `mapstructure:",squash" validate:"required"`
 	Discord    DiscordConfig    `mapstructure:",squash" validate:"required"`
+	Embedder   EmbedderConfig   `mapstructure:",squash" validate:"required"`
 	Github     GithubConfig     `mapstructure:",squash" validate:"required"`
 	Slack      SlackConfig      `mapstructure:",squash" validate:"required"`
 	Jira       JiraConfig       `mapstructure:",squash" validate:"required"`
@@ -36,6 +37,10 @@ type DiscordConfig struct {
 type GithubConfig struct {
 	Token     string `mapstructure:"github_token" validate:"required"`
 	TokenType string `mapstructure:"github_token_type" validate:"required"`
+}
+
+type EmbedderConfig struct {
+	BaseURL string `mapstructure:"embedder_base_url" validate:"required,url"`
 }
 
 type SlackConfig struct {

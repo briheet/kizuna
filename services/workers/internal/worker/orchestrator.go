@@ -55,7 +55,7 @@ func NewOrchestrator(ctx context.Context, config *config.Config, logger *logger.
 	// After getting them, build and store
 	for _, category := range providers.ActiveProviders {
 		builderFunc := WorkerFuncs[WorkerCategory(category)]
-		workers = append(workers, builderFunc(dbClient, logger, providerClients))
+		workers = append(workers, builderFunc(config, dbClient, logger, providerClients))
 	}
 
 	// Build empty queue for now
