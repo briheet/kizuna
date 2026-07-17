@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChatView } from './components/ChatView'
 import { EvidencePanel } from './components/EvidencePanel'
 import { Sidebar } from './components/Sidebar'
+import { SourcesPanel } from './components/SourcesPanel'
 import { loadConversations, makeConversation, saveConversations, titleFromPrompt } from './lib/conversations'
-import { checkApiHealth, composeAnswer, searchKnowledge } from './lib/search'
+import { checkApiHealth, searchKnowledge } from './lib/search'
 import type { ChatMessage, ConnectionStatus, Conversation, Evidence } from './types'
 
 const SIDEBAR_COLLAPSED_KEY = 'kizuna:sidebar-collapsed:v1'
@@ -19,6 +20,7 @@ function App() {
   const [evidenceOpen, setEvidenceOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true')
+  const [sourcesOpen, setSourcesOpen] = useState(false)
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeId) ?? conversations[0],
@@ -139,13 +141,14 @@ function App() {
 
   async function retrieveAnswer(conversationId: string, prompt: string, messageId: string) {
     try {
-      const results = await searchKnowledge(prompt)
+      const response = await searchKnowledge(prompt)
+      const results = response.evidence
       setConnectionStatus('online')
       setEvidence(results)
       const answer: ChatMessage = {
         id: messageId,
         role: 'assistant',
-        content: composeAnswer(results),
+        content: response.summary,
         createdAt: Date.now(),
         evidence: results,
       }
@@ -184,6 +187,10 @@ function App() {
         onCloseMobile={() => setMobileMenuOpen(false)}
         onDelete={deleteConversation}
         onNew={createNewConversation}
+        onOpenSources={() => {
+          setSourcesOpen(true)
+          setMobileMenuOpen(false)
+        }}
         onSelect={setActiveId}
         onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
       />
@@ -194,11 +201,13 @@ function App() {
         evidenceOpen={evidenceOpen}
         onOpenEvidence={() => setEvidenceOpen((open) => !open)}
         onOpenMenu={() => setMobileMenuOpen(true)}
+        onOpenSources={() => setSourcesOpen(true)}
         onRegenerate={regenerateAnswer}
         onSend={sendMessage}
         onUsePrompt={sendMessage}
       />
       <EvidencePanel evidence={evidence} open={evidenceOpen} onClose={() => setEvidenceOpen(false)} />
+      <SourcesPanel connectionStatus={connectionStatus} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
     </div>
   )
 }

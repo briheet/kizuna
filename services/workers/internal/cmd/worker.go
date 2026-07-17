@@ -42,6 +42,7 @@ func WorkerCmd(ctx context.Context) *cobra.Command {
 			return orchestrator.Start(ctx)
 		},
 	}
+	workerCmd.PersistentFlags().StringVarP(&configPath, "configPath", "c", "", "path to the worker configuration file")
 
 	return workerCmd
 }

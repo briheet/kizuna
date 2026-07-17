@@ -8,6 +8,7 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -27,7 +28,9 @@ type WorkerBuilder func(
 	config *config.Config,
 	dbClient *db.Client,
 	logger *logger.Logger,
-	client *providers.Client) Worker
+	client *providers.Client,
+	embedderRepository repository.EmbedderRepository,
+) Worker
 
 var WorkerFuncs = map[WorkerCategory]WorkerBuilder{
 	WorkerCategoryGithub:     NewGithubWorker,

@@ -11,7 +11,6 @@ import (
 	"github.com/briheet/kizuna/backend/internal/config"
 	"github.com/briheet/kizuna/backend/internal/logger"
 	"github.com/briheet/kizuna/backend/internal/types"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -110,9 +109,7 @@ func TestCreateIngestionJobs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			db.Restore(t)
 
-			topicID := uuid.New().String()
 			body, err := json.Marshal(map[string]any{
-				"topic_id":    topicID,
 				"source_type": tt.sourceType,
 				"name":        tt.sourceName,
 				"source_link": tt.sourceLink,
@@ -126,7 +123,14 @@ func TestCreateIngestionJobs(t *testing.T) {
 
 			api.Routes().ServeHTTP(rec, req)
 
-			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, http.StatusAccepted, rec.Code)
+
+			var created types.CreateIngestionResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&created))
+			require.NotEmpty(t, created.TopicID)
+			require.Equal(t, tt.sourceType, created.SourceType)
+			require.Equal(t, len(tt.scopes), created.JobsCreated)
+			require.Equal(t, "available", created.State)
 
 			rows, err := db.Client.Conn().Query(t.Context(), `
 				SELECT kind, queue, payload
@@ -172,7 +176,7 @@ func TestCreateIngestionJobs(t *testing.T) {
 				job, ok := jobs[kind]
 				require.True(t, ok, "missing job kind %s", kind)
 				require.Equal(t, tt.expectedQ, job.Queue)
-				require.Equal(t, topicID, job.Payload["topic_id"])
+				require.Equal(t, created.TopicID, job.Payload["topic_id"])
 				require.Equal(t, tt.sourceType, job.Payload["source_type"])
 				require.Equal(t, tt.sourceName, job.Payload["name"])
 				require.Equal(t, tt.sourceLink, job.Payload["source_link"])
@@ -190,10 +194,7 @@ func TestJobsStatus(t *testing.T) {
 	db.Restore(t)
 
 	app := api.NewApi(t.Context(), &config.Config{}, logger.NewNopLogger(), db.Client)
-	topicID := uuid.New().String()
-
 	body, err := json.Marshal(map[string]any{
-		"topic_id":    topicID,
 		"source_type": "github",
 		"name":        "golang/go",
 		"source_link": "https://github.com/golang/go",
@@ -211,7 +212,11 @@ func TestJobsStatus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/createJobs", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 	app.Routes().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+
+	var created types.CreateIngestionResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&created))
+	require.NotEmpty(t, created.TopicID)
 
 	err = db.Client.ExecuteTx(t.Context(), func(tx pgx.Tx) error {
 		_, err := tx.Exec(t.Context(), `
@@ -223,7 +228,7 @@ func TestJobsStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/jobsStatus?topic_id="+topicID+"&source_type=github", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/jobsStatus?topic_id="+created.TopicID+"&source_type=github", nil)
 	rec = httptest.NewRecorder()
 	app.Routes().ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())

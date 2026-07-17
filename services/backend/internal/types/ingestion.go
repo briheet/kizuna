@@ -7,12 +7,19 @@ import (
 // This is a generic pattern all requests will follow
 // It will then be validated and switched accordingly
 type CreateIngestionRequest struct {
-	TopicID    string          `json:"topic_id" validate:"required,uuid4"`
+	TopicID    string          `json:"topic_id,omitempty" validate:"omitempty,uuid4"`
 	SourceType string          `json:"source_type" validate:"required,oneof=github slack discord jira confluence"`
 	Name       string          `json:"name" validate:"required"`
 	SourceLink string          `json:"source_link" validate:"omitempty,url"`
 	Scope      []string        `json:"scope" validate:"required,min=1,dive,required"`
 	Config     json.RawMessage `json:"config" validate:"required"`
+}
+
+type CreateIngestionResponse struct {
+	TopicID     string `json:"topic_id"`
+	SourceType  string `json:"source_type"`
+	JobsCreated int    `json:"jobs_created"`
+	State       string `json:"state"`
 }
 
 // Particular config of the repo

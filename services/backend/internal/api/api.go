@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	aiclient "github.com/briheet/kizuna/backend/internal/ai"
 	"github.com/briheet/kizuna/backend/internal/config"
 	"github.com/briheet/kizuna/backend/internal/db"
 	"github.com/briheet/kizuna/backend/internal/logger"
+	airepository "github.com/briheet/kizuna/backend/internal/repository/ai"
 	"github.com/briheet/kizuna/backend/internal/repository/cockroachdb"
 	"github.com/briheet/kizuna/backend/internal/repository/embedder"
 	"github.com/briheet/kizuna/backend/internal/services"
@@ -36,8 +38,10 @@ func NewApi(
 	ingestionRepo := cockroachdb.NewCockroachDbIngestionRepository(dbClient)
 	ingestionService := services.NewIngestionService(ingestionRepo)
 	searchRepo := cockroachdb.NewCockroachDbSearchRepository(dbClient)
-	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
-	searchService := services.NewSearchService(searchRepo, embedderRepo)
+	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL, config.Embedder.Model)
+	aiClient := aiclient.NewClient(config)
+	answerRepo := airepository.NewOpenAIRepository(aiClient, config.AI.Model, config.AI.MaxOutputTokens)
+	searchService := services.NewSearchService(searchRepo, embedderRepo, answerRepo)
 
 	return &API{
 		config:   config,
@@ -62,6 +66,7 @@ func (a *API) Server(port int) *http.Server {
 
 func (a *API) Routes() *mux.Router {
 	r := mux.NewRouter()
+	r.Use(a.cors)
 
 	// v1 paths
 	sub := r.PathPrefix("/api/v1").Subrouter()
@@ -70,6 +75,10 @@ func (a *API) Routes() *mux.Router {
 	a.registerHealthHandlers(sub)
 	a.registerIngestionHandlers(sub)
 	a.registerSearchHandlers(sub)
+
+	r.PathPrefix("/").Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	return r
 }

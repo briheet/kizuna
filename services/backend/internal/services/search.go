@@ -11,24 +11,24 @@ import (
 type SearchService struct {
 	repo     repository.SearchRepository
 	embedder repository.EmbedderRepository
+	answerer repository.AnswerRepository
 }
 
-func NewSearchService(repo repository.SearchRepository, embedder repository.EmbedderRepository) *SearchService {
-	return &SearchService{repo: repo, embedder: embedder}
+func NewSearchService(
+	repo repository.SearchRepository,
+	embedder repository.EmbedderRepository,
+	answerer repository.AnswerRepository,
+) *SearchService {
+	return &SearchService{repo: repo, embedder: embedder, answerer: answerer}
 }
 
 func (s *SearchService) Search(ctx context.Context, req types.SearchRequest) (*types.SearchResponse, error) {
-	topicID, err := uuid.Parse(req.TopicID)
+	vectors, err := s.embedder.Embed(ctx, []string{"search_query: " + req.Query})
 	if err != nil {
 		return nil, err
 	}
 
-	vectors, err := s.embedder.Embed(ctx, []string{req.Query})
-	if err != nil {
-		return nil, err
-	}
-
-	results, err := s.repo.SearchChunks(ctx, topicID, vectors[0], req.Limit)
+	results, err := s.repo.SearchChunks(ctx, vectors[0], req.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -47,5 +47,26 @@ func (s *SearchService) Search(ctx context.Context, req types.SearchRequest) (*t
 		return nil, err
 	}
 
-	return &types.SearchResponse{Results: results, RelatedNodes: nodes, Edges: edges}, nil
+	answerSources := make([]repository.AnswerSource, len(results))
+	for index, result := range results {
+		answerSources[index] = repository.AnswerSource{
+			Reference:  index + 1,
+			Title:      result.Title,
+			SourceType: result.SourceType,
+			NodeType:   result.NodeType,
+			Content:    result.Content,
+		}
+	}
+
+	summary, err := s.answerer.Summarize(ctx, req.Query, answerSources)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.SearchResponse{
+		Summary:      summary,
+		Results:      results,
+		RelatedNodes: nodes,
+		Edges:        edges,
+	}, nil
 }

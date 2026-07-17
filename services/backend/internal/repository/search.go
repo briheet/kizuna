@@ -8,7 +8,7 @@ import (
 )
 
 type SearchRepository interface {
-	SearchChunks(ctx context.Context, topicID uuid.UUID, embedding []float32, limit int) ([]types.SearchResult, error)
+	SearchChunks(ctx context.Context, embedding []float32, limit int) ([]types.SearchResult, error)
 	GetRelatedGraph(ctx context.Context, nodeIDs []uuid.UUID) ([]types.RelatedNode, []types.SearchEdge, error)
 }
 

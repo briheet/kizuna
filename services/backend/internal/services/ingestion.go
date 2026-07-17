@@ -68,7 +68,7 @@ func (s *IngestionService) CreateGithubJobs(ctx context.Context, req *types.Crea
 		})
 	}
 
-	return s.repo.CreateJobs(ctx, jobs)
+	return s.repo.CreateJobs(ctx, req.TopicID, req.Name, jobs)
 }
 
 func (s *IngestionService) CreateSlackJobs(ctx context.Context, req *types.CreateIngestionRequest, cfg *types.CreateSlackJobsConfig) error {
@@ -115,7 +115,7 @@ func (s *IngestionService) CreateSlackJobs(ctx context.Context, req *types.Creat
 		})
 	}
 
-	return s.repo.CreateJobs(ctx, jobs)
+	return s.repo.CreateJobs(ctx, req.TopicID, req.Name, jobs)
 }
 
 func (s *IngestionService) CreateDiscordJobs(ctx context.Context, req *types.CreateIngestionRequest, cfg *types.CreateDiscordJobsConfig) error {
@@ -161,7 +161,7 @@ func (s *IngestionService) CreateDiscordJobs(ctx context.Context, req *types.Cre
 		})
 	}
 
-	return s.repo.CreateJobs(ctx, jobs)
+	return s.repo.CreateJobs(ctx, req.TopicID, req.Name, jobs)
 }
 
 func (s *IngestionService) CreateJiraJobs(ctx context.Context, req *types.CreateIngestionRequest, cfg *types.CreateJiraJobsConfig) error {
@@ -204,7 +204,7 @@ func (s *IngestionService) CreateJiraJobs(ctx context.Context, req *types.Create
 		})
 	}
 
-	return s.repo.CreateJobs(ctx, jobs)
+	return s.repo.CreateJobs(ctx, req.TopicID, req.Name, jobs)
 }
 
 func (s *IngestionService) CreateConfluenceJobs(ctx context.Context, req *types.CreateIngestionRequest, cfg *types.CreateConfluenceJobsConfig) error {
@@ -245,5 +245,5 @@ func (s *IngestionService) CreateConfluenceJobs(ctx context.Context, req *types.
 		})
 	}
 
-	return s.repo.CreateJobs(ctx, jobs)
+	return s.repo.CreateJobs(ctx, req.TopicID, req.Name, jobs)
 }

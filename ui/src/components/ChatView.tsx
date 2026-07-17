@@ -24,6 +24,7 @@ type ChatViewProps = {
   evidenceOpen: boolean
   onOpenEvidence: () => void
   onOpenMenu: () => void
+  onOpenSources: () => void
   onRegenerate: (messageId: string) => void
   onSend: (prompt: string) => void
   onUsePrompt: (prompt: string) => void
@@ -95,10 +96,10 @@ export function ChatView(props: ChatViewProps) {
           </div>
         </div>
         <div className="header-actions">
-          <div className="scope-pill">
+          <button className="scope-pill" onClick={props.onOpenSources} title="Manage knowledge sources" type="button">
             <Database />
             <span>All knowledge</span>
-          </div>
+          </button>
           {props.evidence.length > 0 && (
             <button className={`icon-button ${props.evidenceOpen ? 'is-active' : ''}`} onClick={props.onOpenEvidence} title="Open evidence" type="button">
               <PanelRightOpen />

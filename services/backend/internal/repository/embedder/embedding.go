@@ -19,10 +19,10 @@ type NomicRepository struct {
 	client  *http.Client
 }
 
-func NewNomicRepository(baseURL string) *NomicRepository {
+func NewNomicRepository(baseURL, model string) *NomicRepository {
 	return &NomicRepository{
 		baseURL: baseURL,
-		model:   "nomic-embed-text",
+		model:   model,
 		client:  http.DefaultClient,
 	}
 }

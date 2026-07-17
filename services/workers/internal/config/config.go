@@ -10,19 +10,19 @@ import (
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 type Config struct {
-	Confluence ConfluenceConfig `mapstructure:",squash" validate:"required"`
+	Confluence ConfluenceConfig `mapstructure:",squash"`
 	Db         DbConfig         `mapstructure:",squash" validate:"required"`
-	Discord    DiscordConfig    `mapstructure:",squash" validate:"required"`
+	Discord    DiscordConfig    `mapstructure:",squash"`
 	Embedder   EmbedderConfig   `mapstructure:",squash" validate:"required"`
 	Github     GithubConfig     `mapstructure:",squash" validate:"required"`
-	Slack      SlackConfig      `mapstructure:",squash" validate:"required"`
-	Jira       JiraConfig       `mapstructure:",squash" validate:"required"`
+	Slack      SlackConfig      `mapstructure:",squash"`
+	Jira       JiraConfig       `mapstructure:",squash"`
 }
 
 type ConfluenceConfig struct {
-	Host  string `mapstructure:"confluence_host" validate:"required"`
-	Mail  string `mapstructure:"confluence_mail" validate:"required"`
-	Token string `mapstructure:"confluence_token" validate:"required"`
+	Host  string `mapstructure:"confluence_host"`
+	Mail  string `mapstructure:"confluence_mail"`
+	Token string `mapstructure:"confluence_token"`
 }
 
 type DbConfig struct {
@@ -30,27 +30,28 @@ type DbConfig struct {
 }
 
 type DiscordConfig struct {
-	Token     string `mapstructure:"discord_token" validate:"required"`
-	TokenType string `mapstructure:"discord_token_type" validate:"required"`
+	Token     string `mapstructure:"discord_token"`
+	TokenType string `mapstructure:"discord_token_type"`
 }
 
 type GithubConfig struct {
 	Token     string `mapstructure:"github_token" validate:"required"`
-	TokenType string `mapstructure:"github_token_type" validate:"required"`
+	TokenType string `mapstructure:"github_token_type"`
 }
 
 type EmbedderConfig struct {
 	BaseURL string `mapstructure:"embedder_base_url" validate:"required,url"`
+	Model   string `mapstructure:"embedder_model" validate:"required"`
 }
 
 type SlackConfig struct {
-	Token string `mapstructure:"slack_token" validate:"required"`
+	Token string `mapstructure:"slack_token"`
 }
 
 type JiraConfig struct {
-	Host  string `mapstructure:"jira_host" validate:"required"`
-	Mail  string `mapstructure:"jira_mail" validate:"required"`
-	Token string `mapstructure:"jira_token" validate:"required"`
+	Host  string `mapstructure:"jira_host"`
+	Mail  string `mapstructure:"jira_mail"`
+	Token string `mapstructure:"jira_token"`
 }
 
 func LoadConfig(ctx context.Context, path string) (*Config, error) {

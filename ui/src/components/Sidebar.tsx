@@ -1,4 +1,4 @@
-import { Database, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Trash2, X } from 'lucide-react'
+import { Database, MessageSquareText, PanelLeftClose, PanelLeftOpen, Plus, Search, Trash2, Unplug, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { ConnectionStatus, Conversation } from '../types'
 import { BrandMark } from './BrandMark'
@@ -12,6 +12,7 @@ type SidebarProps = {
   onCloseMobile: () => void
   onDelete: (id: string) => void
   onNew: () => void
+  onOpenSources: () => void
   onSelect: (id: string) => void
   onToggle: () => void
 }
@@ -44,6 +45,11 @@ export function Sidebar(props: SidebarProps) {
           <Plus />
           <span>New conversation</span>
           <kbd>⌘ K</kbd>
+        </button>
+
+        <button className="sources-button" onClick={props.onOpenSources} title={props.collapsed ? 'Knowledge sources' : undefined} type="button">
+          <Unplug />
+          <span>Knowledge sources</span>
         </button>
 
         <label className="history-search">

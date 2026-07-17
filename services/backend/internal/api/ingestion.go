@@ -7,6 +7,7 @@ import (
 
 	"github.com/briheet/kizuna/backend/internal/domain"
 	"github.com/briheet/kizuna/backend/internal/types"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
@@ -28,6 +29,9 @@ func (a *API) createJobs(w http.ResponseWriter, r *http.Request) {
 		a.logger.Error("Error decoding the create jobs request body", zap.String("Err:", err.Error()))
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
+	}
+	if req.TopicID == "" {
+		req.TopicID = uuid.NewString()
 	}
 
 	// Validate type shyt
@@ -146,6 +150,17 @@ func (a *API) createJobs(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "unsupported source_type", http.StatusBadRequest)
 		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	if err := json.NewEncoder(w).Encode(types.CreateIngestionResponse{
+		TopicID:     req.TopicID,
+		SourceType:  req.SourceType,
+		JobsCreated: len(req.Scope),
+		State:       "available",
+	}); err != nil {
+		a.logger.Error("encode create jobs response failed", zap.Error(err))
 	}
 
 }

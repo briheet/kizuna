@@ -1,9 +1,8 @@
 package types
 
 type SearchRequest struct {
-	TopicID string `json:"topic_id" validate:"required,uuid"`
-	Query   string `json:"query" validate:"required"`
-	Limit   int    `json:"limit" validate:"required,min=1,max=50"`
+	Query string `json:"query" validate:"required"`
+	Limit int    `json:"limit" validate:"required,min=1,max=50"`
 }
 
 type SearchResult struct {
@@ -12,10 +11,13 @@ type SearchResult struct {
 	Content     string  `json:"content"`
 	Title       string  `json:"title"`
 	SourceLink  string  `json:"source_link"`
+	SourceType  string  `json:"source_type"`
+	NodeType    string  `json:"node_type"`
 	Distance    float64 `json:"distance"`
 }
 
 type SearchResponse struct {
+	Summary      string         `json:"summary"`
 	Results      []SearchResult `json:"results"`
 	RelatedNodes []RelatedNode  `json:"related_nodes"`
 	Edges        []SearchEdge   `json:"edges"`

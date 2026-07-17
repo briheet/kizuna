@@ -11,7 +11,9 @@
   imports = [
     ../../modules/backend.nix
     ../../modules/cockroachdb.nix
+    ../../modules/nomic.nix
     ../../modules/ui.nix
+    ../../modules/workers.nix
   ];
 
   nixpkgs.config.allowUnfreePredicate =
@@ -38,6 +40,18 @@
   services.kizuna-backend = {
     enable = true;
     port = 4000;
+    openFirewall = true;
+    corsAllowedOrigin = "*";
+    embedderBaseUrl = "http://${config.services.kizuna-nomic.host}:${toString config.services.kizuna-nomic.port}";
+    embedderModel = config.services.kizuna-nomic.model;
+  };
+
+  services.kizuna-nomic.enable = true;
+
+  services.kizuna-workers = {
+    enable = true;
+    embedderBaseUrl = "http://${config.services.kizuna-nomic.host}:${toString config.services.kizuna-nomic.port}";
+    embedderModel = config.services.kizuna-nomic.model;
   };
 
   services.kizuna-ui = {
@@ -52,20 +66,16 @@
     insecure = true;
 
     listen = {
-      address = "0.0.0.0";
+      address = "127.0.0.1";
       port = 26257;
     };
 
     http = {
-      address = "0.0.0.0";
+      address = "127.0.0.1";
       port = 8080;
     };
 
-    openPorts = true;
-
-    extraArgs = [
-      "--advertise-addr=zangetsu:26257"
-    ];
+    openPorts = false;
   };
 
   system.stateVersion = "26.05";

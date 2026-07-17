@@ -17,7 +17,12 @@ func NewCockroachDbIngestionRepository(db *db.Client) *CockroachDbIngestionRepos
 	return &CockroachDbIngestionRepository{db: db}
 }
 
-func (r *CockroachDbIngestionRepository) CreateJobs(ctx context.Context, jobs []types.Job) error {
+const (
+	defaultOrganisationID = "00000000-0000-4000-8000-000000000001"
+	defaultTeamID         = "00000000-0000-4000-8000-000000000002"
+)
+
+func (r *CockroachDbIngestionRepository) CreateJobs(ctx context.Context, topicID string, topicName string, jobs []types.Job) error {
 	query := `
   			insert into jobs (
   				id,
@@ -47,6 +52,30 @@ func (r *CockroachDbIngestionRepository) CreateJobs(ctx context.Context, jobs []
   		`
 
 	return r.db.ExecuteTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `
+			insert into organisations (id, name, created_at)
+			values ($1, 'Kizuna', now())
+			on conflict (id) do nothing;
+		`, defaultOrganisationID); err != nil {
+			return fmt.Errorf("create ingestion organisation: %w", err)
+		}
+
+		if _, err := tx.Exec(ctx, `
+			insert into teams (id, organisation_id, name, created_at)
+			values ($1, $2, 'Development', now())
+			on conflict (id) do nothing;
+		`, defaultTeamID, defaultOrganisationID); err != nil {
+			return fmt.Errorf("create ingestion team: %w", err)
+		}
+
+		if _, err := tx.Exec(ctx, `
+			insert into topics (id, team_id, name, created_at)
+			values ($1, $2, $3, now())
+			on conflict (id) do nothing;
+		`, topicID, defaultTeamID, topicName); err != nil {
+			return fmt.Errorf("create ingestion topic: %w", err)
+		}
+
 		for _, job := range jobs {
 			if _, err := tx.Exec(
 				ctx,

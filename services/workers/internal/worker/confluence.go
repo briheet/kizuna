@@ -8,6 +8,7 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -18,6 +19,7 @@ func NewConfluenceWorker(
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
+	embedderRepository repository.EmbedderRepository,
 ) Worker {
 	return &JobWorker{
 		ID:         uuid.New(),
