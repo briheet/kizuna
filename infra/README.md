@@ -70,6 +70,11 @@ systemctl status ollama ollama-model-loader
 
 ## Database migrations
 
+The development host pins CockroachDB `v25.4.12`, which supports the `VECTOR`
+type used by the embedding schema. It uses `/var/lib/cockroachdb-v25-4` as its
+state directory so legacy pre-vector development stores are not upgraded in
+place.
+
 `kizuna-backend-migrate` waits for CockroachDB, creates the application database
 when needed, and applies the SQL migrations packaged with the backend. The
 backend starts only after this oneshot completes successfully. Running it again
@@ -100,9 +105,9 @@ chmod 0600 /etc/credstore.encrypted/backend-secrets.env /etc/credstore.encrypted
 
 Run these commands on the target VM so the credentials are bound to that host.
 At service start, systemd decrypts each value into its private credential
-directory and loads the dotenv file into the service environment. Viper reads
-the values through its normal environment override path, and the plaintext
-values never enter the repository or Nix store.
+directory. The credential path is passed to the application as a second
+`--configPath`, and Viper merges it over the packaged configuration. The
+plaintext values never enter the process environment, repository, or Nix store.
 
 For a fine-grained GitHub token, select only the repositories that Kizuna will
 index and grant read access to Contents, Issues, and Pull requests. Metadata read

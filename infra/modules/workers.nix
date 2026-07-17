@@ -24,6 +24,7 @@ let
     JIRA_MAIL=
     JIRA_TOKEN=
   '';
+
 in
 {
   options.services.kizuna-workers = {
@@ -61,8 +62,7 @@ in
       ];
 
       serviceConfig = {
-        ExecStart = "${workersPackage}/bin/workers worker --configPath ${configFile}";
-        EnvironmentFile = "%d/workers-secrets.env";
+        ExecStart = "${workersPackage}/bin/workers worker --configPath ${configFile} --configPath %d/workers-secrets.env";
         LoadCredentialEncrypted = [
           "workers-secrets.env:/etc/credstore.encrypted/workers-secrets.env"
         ];

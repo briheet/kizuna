@@ -85,20 +85,44 @@ func (s *GithubService) HandleJob(ctx context.Context, jobID uuid.UUID, kind str
 }
 
 func (s *GithubService) handleRepository(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {
-	repo, _, err := s.client.GetRepository(ctx, githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo})
+	req := githubprovider.RepoRequest{Owner: p.Config.Owner, Repo: p.Config.Repo}
+	repo, _, err := s.client.GetRepository(ctx, req)
 	if err != nil {
 		return err
 	}
 
-	props, err := json.Marshal(repo)
+	readme, response, err := s.client.GetReadme(ctx, req)
+	if err != nil && (response == nil || response.StatusCode != 404) {
+		return err
+	}
+	if response != nil && response.StatusCode == 404 {
+		readme = nil
+	}
+
+	graph, err := buildRepositoryGraph(p, repo, readme)
 	if err != nil {
 		return err
 	}
-	return s.saveGraph(ctx, sourceID, repository.GraphInput{
+
+	return s.saveGraph(ctx, sourceID, graph)
+}
+
+func buildRepositoryGraph(
+	p GithubJobPayload,
+	repo *githubprovider.Repository,
+	readme *githubprovider.RepositoryContent,
+) (repository.GraphInput, error) {
+	props, err := json.Marshal(repo)
+	if err != nil {
+		return repository.GraphInput{}, err
+	}
+
+	repoExternalID := fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo)
+	graph := repository.GraphInput{
 		Nodes: []repository.GraphNodeWithChunks{{
 			Node: repository.GraphNodeInput{
 				NodeType:   "github_repository",
-				ExternalID: fmt.Sprintf("github:%s/%s", p.Config.Owner, p.Config.Repo),
+				ExternalID: repoExternalID,
 				SourceLink: repo.GetHTMLURL(),
 				Title:      repo.GetFullName(),
 				Path:       repo.GetFullName(),
@@ -106,7 +130,42 @@ func (s *GithubService) handleRepository(ctx context.Context, sourceID uuid.UUID
 			},
 			Chunks: []repository.ChunkInput{{Index: 0, Content: repo.GetDescription()}},
 		}},
+	}
+
+	if readme == nil {
+		return graph, nil
+	}
+
+	content, err := readme.GetContent()
+	if err != nil {
+		return repository.GraphInput{}, fmt.Errorf("decode github README: %w", err)
+	}
+	readmeProps, err := json.Marshal(readme)
+	if err != nil {
+		return repository.GraphInput{}, err
+	}
+
+	readmeExternalID := repoExternalID + "/readme"
+	graph.Nodes = append(graph.Nodes, repository.GraphNodeWithChunks{
+		Node: repository.GraphNodeInput{
+			NodeType:   "github_readme",
+			ExternalID: readmeExternalID,
+			SourceLink: readme.GetHTMLURL(),
+			Title:      readme.GetName(),
+			Path:       readme.GetPath(),
+			Properties: readmeProps,
+		},
+		Chunks: []repository.ChunkInput{{Index: 0, Content: content}},
 	})
+	graph.Edges = append(graph.Edges, repository.GraphEdgeInput{
+		FromExternalID: repoExternalID,
+		ToExternalID:   readmeExternalID,
+		EdgeType:       "has_readme",
+		EdgeScope:      "github",
+		Confidence:     1,
+	})
+
+	return graph, nil
 }
 
 func (s *GithubService) handleIssues(ctx context.Context, sourceID uuid.UUID, p GithubJobPayload) error {

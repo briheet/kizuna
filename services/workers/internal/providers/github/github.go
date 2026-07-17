@@ -26,6 +26,10 @@ func (c *Client) GetRepository(ctx context.Context, req RepoRequest) (*Repositor
 	return c.client.Repositories.Get(ctx, req.Owner, req.Repo)
 }
 
+func (c *Client) GetReadme(ctx context.Context, req RepoRequest) (*RepositoryContent, *Response, error) {
+	return c.client.Repositories.GetReadme(ctx, req.Owner, req.Repo, nil)
+}
+
 func (c *Client) ListIssues(ctx context.Context, req ListIssuesRequest) ([]*Issue, *Response, error) {
 	return c.client.Issues.ListByRepo(ctx, req.Owner, req.Repo, &githubsdk.IssueListByRepoOptions{
 		State:     req.State,

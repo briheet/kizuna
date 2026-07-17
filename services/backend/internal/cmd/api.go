@@ -16,7 +16,7 @@ import (
 
 func ApiCmd(ctx context.Context) *cobra.Command {
 
-	var configPath string
+	var configPaths []string
 
 	apiCmd := &cobra.Command{
 		Use:   "api",
@@ -24,7 +24,7 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			// Load config
-			cfg, err := config.LoadConfig(ctx, configPath)
+			cfg, err := config.LoadConfig(ctx, configPaths...)
 			if err != nil {
 				return err
 			}
@@ -69,7 +69,7 @@ func ApiCmd(ctx context.Context) *cobra.Command {
 		},
 	}
 
-	apiCmd.PersistentFlags().StringVarP(&configPath, "configPath", "c", configPath, "Pass at start to give config path to the application")
+	apiCmd.PersistentFlags().StringArrayVarP(&configPaths, "configPath", "c", nil, "configuration file path; later files override earlier files")
 
 	return apiCmd
 }

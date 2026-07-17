@@ -53,6 +53,7 @@ let
         --dburl ${lib.escapeShellArg cfg.migrationDatabaseUrl}
     '';
   };
+
 in
 {
 
@@ -180,8 +181,7 @@ in
       ];
 
       serviceConfig = {
-        ExecStart = "${backendPackage}/bin/backend api --configPath ${configFile}";
-        EnvironmentFile = "%d/backend-secrets.env";
+        ExecStart = "${backendPackage}/bin/backend api --configPath ${configFile} --configPath %d/backend-secrets.env";
         LoadCredentialEncrypted = [
           "backend-secrets.env:/etc/credstore.encrypted/backend-secrets.env"
         ];

@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
@@ -41,14 +42,17 @@ type EmbedderConfig struct {
 	Model   string `mapstructure:"embedder_model" validate:"required"`
 }
 
-func LoadConfig(ctx context.Context, path string) (*Config, error) {
+func LoadConfig(ctx context.Context, paths ...string) (*Config, error) {
 
 	var err error
 	var config Config
+	if len(paths) == 0 || paths[0] == "" {
+		return nil, fmt.Errorf("at least one config path is required")
+	}
 
 	// Viper config
 	v := viper.New()
-	v.SetConfigFile(path)
+	v.SetConfigFile(paths[0])
 	v.SetConfigType("env")
 
 	// If we have already injected in the environment
@@ -57,6 +61,17 @@ func LoadConfig(ctx context.Context, path string) (*Config, error) {
 	err = v.ReadInConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	for _, path := range paths[1:] {
+		if path == "" {
+			return nil, fmt.Errorf("config path cannot be empty")
+		}
+		v.SetConfigFile(path)
+		v.SetConfigType("env")
+		if err := v.MergeInConfig(); err != nil {
+			return nil, fmt.Errorf("merge config %q: %w", path, err)
+		}
 	}
 
 	err = v.Unmarshal(&config)

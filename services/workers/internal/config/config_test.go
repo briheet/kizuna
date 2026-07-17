@@ -36,18 +36,19 @@ JIRA_TOKEN=
 	require.Empty(t, cfg.Jira.Token)
 }
 
-func TestLoadConfigUsesGitHubTokenFromEnvironment(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "environment-github-token")
-
-	path := filepath.Join(t.TempDir(), "workers.env")
+func TestLoadConfigMergesGitHubCredentialFile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "workers.env")
 	require.NoError(t, os.WriteFile(path, []byte(`
 DATABASEURL=postgresql://root@127.0.0.1:26257/kizuna?sslmode=disable
 EMBEDDER_BASE_URL=http://127.0.0.1:11434
 EMBEDDER_MODEL=nomic-embed-text:v1.5
 GITHUB_TOKEN=
 `), 0o600))
+	credentialPath := filepath.Join(directory, "workers-secrets.env")
+	require.NoError(t, os.WriteFile(credentialPath, []byte("GITHUB_TOKEN=credential-github-token\n"), 0o600))
 
-	cfg, err := LoadConfig(t.Context(), path)
+	cfg, err := LoadConfig(t.Context(), path, credentialPath)
 	require.NoError(t, err)
-	require.Equal(t, "environment-github-token", cfg.Github.Token)
+	require.Equal(t, "credential-github-token", cfg.Github.Token)
 }

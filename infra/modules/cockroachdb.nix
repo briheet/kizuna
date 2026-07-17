@@ -15,7 +15,7 @@ let
       "${crdb}/bin/cockroach"
       (if cfg.singleNode then "start-single-node" else "start")
       "--logtostderr"
-      "--store=/var/lib/cockroachdb"
+      "--store=/var/lib/${cfg.stateDirectory}"
 
       # WebUI settings
       "--http-addr=${cfg.http.address}:${toString cfg.http.port}"
@@ -109,6 +109,12 @@ in
         type = lib.types.str;
         default = "cockroachdb";
         description = "User account under which CockroachDB runs";
+      };
+
+      stateDirectory = lib.mkOption {
+        type = lib.types.strMatching "[A-Za-z0-9_.-]+";
+        default = "cockroachdb";
+        description = "Name of the persistent directory below /var/lib used by CockroachDB.";
       };
 
       singleNode = lib.mkOption {
@@ -218,13 +224,13 @@ in
       requires = [ "time-sync.target" ];
       wantedBy = [ "multi-user.target" ];
 
-      unitConfig.RequiresMountsFor = "/var/lib/cockroachdb";
+      unitConfig.RequiresMountsFor = "/var/lib/${cfg.stateDirectory}";
 
       serviceConfig = {
         ExecStart = startupCommand;
         Type = "simple";
         User = cfg.user;
-        StateDirectory = "cockroachdb";
+        StateDirectory = cfg.stateDirectory;
         StateDirectoryMode = "0700";
 
         Restart = "always";

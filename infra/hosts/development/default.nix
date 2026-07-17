@@ -62,8 +62,10 @@
   # Services
   services.cockroachdb = {
     enable = true;
+    package = pkgs.callPackage ../../packages/cockroachdb.nix { };
     singleNode = true;
     insecure = true;
+    stateDirectory = "cockroachdb-v25-4";
 
     listen = {
       address = "127.0.0.1";
