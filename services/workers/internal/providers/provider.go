@@ -11,8 +11,6 @@ import (
 	"github.com/briheet/kizuna/workers/internal/providers/slack"
 )
 
-var ActiveProviders = []string{"github", "discord", "slack", "confluence", "jira"}
-
 type Client struct {
 	cfg        *config.Config
 	confluence *confluence.Client
@@ -23,39 +21,62 @@ type Client struct {
 }
 
 func NewClientProvider(ctx context.Context, cfg *config.Config) (*Client, error) {
-	confluenceClient, err := confluence.NewClient(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-
 	githubClient, err := github.NewClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	discordClient, err := discord.NewClient(ctx, cfg)
-	if err != nil {
-		return nil, err
+	client := &Client{
+		cfg:    cfg,
+		github: githubClient,
 	}
 
-	slackClient, err := slack.NewClient(ctx, cfg)
-	if err != nil {
-		return nil, err
+	if cfg.Discord.Token != "" {
+		client.discord, err = discord.NewClient(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	jiraClient, err := jira.NewClient(ctx, cfg)
-	if err != nil {
-		return nil, err
+	if cfg.Slack.Token != "" {
+		client.slack, err = slack.NewClient(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return &Client{
-		cfg:        cfg,
-		confluence: confluenceClient,
-		github:     githubClient,
-		discord:    discordClient,
-		slack:      slackClient,
-		jira:       jiraClient,
-	}, nil
+	if cfg.Confluence.Token != "" {
+		client.confluence, err = confluence.NewClient(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.Jira.Token != "" {
+		client.jira, err = jira.NewClient(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return client, nil
+}
+
+func EnabledProviders(cfg *config.Config) []string {
+	active := []string{"github"}
+	if cfg.Discord.Token != "" {
+		active = append(active, "discord")
+	}
+	if cfg.Slack.Token != "" {
+		active = append(active, "slack")
+	}
+	if cfg.Confluence.Token != "" {
+		active = append(active, "confluence")
+	}
+	if cfg.Jira.Token != "" {
+		active = append(active, "jira")
+	}
+	return active
 }
 
 func (c *Client) Github() *github.Client { return c.github }

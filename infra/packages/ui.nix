@@ -8,7 +8,7 @@ buildNpmPackage {
 
   src = ../../ui;
 
-  npmDepsHash = "sha256-K+pT8yWFVCjlQk8WCSibUAy/AwX494NkiM1o4JiKtQ4=";
+  npmDepsHash = "sha256-Z/34V2cMkzGZ4Vyh1fqwT5B2xH+DQgetM0Ra7VHTGRM=";
 
   npmBuildScript = "build";
 

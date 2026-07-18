@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/cockroachdb"
@@ -26,8 +28,16 @@ func MigrateCmd(ctx context.Context) *cobra.Command {
 				return err
 			}
 
-			if err := m.Up(); err != nil {
-				return err
+			migrationErr := m.Up()
+			sourceErr, databaseErr := m.Close()
+			if migrationErr != nil && !errors.Is(migrationErr, migrate.ErrNoChange) {
+				return migrationErr
+			}
+			if sourceErr != nil {
+				return fmt.Errorf("close migration source: %w", sourceErr)
+			}
+			if databaseErr != nil {
+				return fmt.Errorf("close migration database: %w", databaseErr)
 			}
 
 			return nil

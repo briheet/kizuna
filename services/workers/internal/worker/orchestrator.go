@@ -7,8 +7,10 @@ import (
 
 	"github.com/briheet/kizuna/workers/internal/config"
 	"github.com/briheet/kizuna/workers/internal/db"
+	embedderclient "github.com/briheet/kizuna/workers/internal/embedder"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	embedderrepository "github.com/briheet/kizuna/workers/internal/repository/embedder"
 	"go.uber.org/zap"
 )
 
@@ -47,15 +49,17 @@ func NewOrchestrator(ctx context.Context, config *config.Config, logger *logger.
 	if err != nil {
 		return nil, err
 	}
+	embedderClient := embedderclient.NewClient(config)
+	embedderRepository := embedderrepository.NewNomicRepository(embedderClient, config.Embedder.Model)
 
 	// Build workers
 	var workers []Worker
 
-	// Get active providers stated in ./internal/providers
+	// Build workers only for providers configured at runtime.
 	// After getting them, build and store
-	for _, category := range providers.ActiveProviders {
+	for _, category := range providers.EnabledProviders(config) {
 		builderFunc := WorkerFuncs[WorkerCategory(category)]
-		workers = append(workers, builderFunc(config, dbClient, logger, providerClients))
+		workers = append(workers, builderFunc(config, dbClient, logger, providerClients, embedderRepository))
 	}
 
 	// Build empty queue for now

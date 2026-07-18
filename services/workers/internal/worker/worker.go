@@ -8,6 +8,7 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -27,7 +28,9 @@ type WorkerBuilder func(
 	config *config.Config,
 	dbClient *db.Client,
 	logger *logger.Logger,
-	client *providers.Client) Worker
+	client *providers.Client,
+	embedderRepository repository.EmbedderRepository,
+) Worker
 
 var WorkerFuncs = map[WorkerCategory]WorkerBuilder{
 	WorkerCategoryGithub:     NewGithubWorker,
@@ -103,6 +106,10 @@ func (j *JobWorker) Start(ctx context.Context) error {
 
 		// Polling case
 		case <-ticker.C:
+			if err := j.rescueJobs(ctx); err != nil {
+				j.Logger.Error("failed to rescue jobs", zap.String("worker", j.Name()), zap.Error(err))
+			}
+
 			jobs, err := j.claimJobs(ctx)
 			if err != nil {
 				// Handle cases
@@ -135,9 +142,11 @@ func (j *JobWorker) runJob(ctx context.Context, job Job) {
 			when attempt >= max_attempt then scheduled_at
 			else now() + interval '1 minute'
 			end,
+			leaseexpires_at = null,
+			last_error = $2,
 			updated_at = now()
 			where id = $1;
-		`, job.ID)
+		`, job.ID, err.Error())
 			return err
 		})
 		if updateErr != nil {
@@ -154,6 +163,8 @@ func (j *JobWorker) runJob(ctx context.Context, job Job) {
 		set
 			state = 'completed',
 			completed_at = now(),
+			leaseexpires_at = null,
+			last_error = null,
 			updated_at = now()
 		where id = $1;
 	`, job.ID)
@@ -188,6 +199,7 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
 		worker_id = $1,
 		attempt = attempt + 1,
 		attempted_at = now(),
+		leaseexpires_at = now() + ($3::int * interval '1 second'),
 		updated_at = now()
 		where id = ANY($2::uuid[]) returning
 		id,
@@ -201,7 +213,8 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
   		worker_id,
   		scheduled_at,
   		attempted_at,
-  		completed_at,
+		completed_at,
+		leaseexpires_at,
   		created_at,
   		updated_at;`
 
@@ -226,7 +239,7 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
 			return err
 		}
 
-		rows, err := tx.Query(ctx, updateQuery, j.ID, jobIDs)
+		rows, err := tx.Query(ctx, updateQuery, j.ID, jobIDs, int(j.Config.LeaseDuration.Seconds()))
 		if err != nil {
 			return err
 		}
@@ -248,6 +261,7 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
 				&job.ScheduledAt,
 				&job.AttemptedAt,
 				&job.CompletedAt,
+				&job.LeaseExpiresAt,
 				&job.CreatedAt,
 				&job.UpdatedAt,
 			); err != nil {
@@ -266,4 +280,25 @@ func (j *JobWorker) claimJobs(ctx context.Context) ([]Job, error) {
 	}
 
 	return jobs, nil
+}
+
+func (j *JobWorker) rescueJobs(ctx context.Context) error {
+	return j.Client.ExecuteTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			update jobs
+			set
+				state = 'available',
+				worker_id = null,
+				leaseexpires_at = null,
+				scheduled_at = now(),
+				last_error = 'job lease expired',
+				updated_at = now()
+			where queue = $1
+			  and ($2 = '' or kind = $2)
+			  and state = 'running'
+			  and leaseexpires_at is not null
+			  and leaseexpires_at <= now();
+		`, j.Queue, j.Kind)
+		return err
+	})
 }

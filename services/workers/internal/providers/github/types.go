@@ -75,6 +75,7 @@ type ListReleasesRequest struct {
 }
 
 type Repository = githubsdk.Repository
+type RepositoryContent = githubsdk.RepositoryContent
 type Issue = githubsdk.Issue
 type IssueComment = githubsdk.IssueComment
 type PullRequest = githubsdk.PullRequest

@@ -10,7 +10,7 @@ import (
 )
 
 func WorkerCmd(ctx context.Context) *cobra.Command {
-	var configPath string
+	var configPaths []string
 
 	workerCmd := &cobra.Command{
 		Use:   "worker",
@@ -18,7 +18,7 @@ func WorkerCmd(ctx context.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 
 			// Load config
-			cfg, err := config.LoadConfig(ctx, configPath)
+			cfg, err := config.LoadConfig(ctx, configPaths...)
 			if err != nil {
 				return err
 			}
@@ -42,6 +42,7 @@ func WorkerCmd(ctx context.Context) *cobra.Command {
 			return orchestrator.Start(ctx)
 		},
 	}
+	workerCmd.PersistentFlags().StringArrayVarP(&configPaths, "configPath", "c", nil, "configuration file path; later files override earlier files")
 
 	return workerCmd
 }

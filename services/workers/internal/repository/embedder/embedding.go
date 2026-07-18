@@ -1,73 +1,94 @@
 package embedder
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"strings"
 
-	"github.com/briheet/kizuna/workers/internal/types"
-	"github.com/go-playground/validator/v10"
+	embedderclient "github.com/briheet/kizuna/workers/internal/embedder"
 )
 
-var validate = validator.New(validator.WithRequiredStructEnabled())
+const nomicDimensions = 768
 
 type NomicRepository struct {
-	baseURL string
-	model   string
-	client  *http.Client
+	client *embedderclient.Client
+	model  string
 }
 
-func NewNomicRepository(baseURL string) *NomicRepository {
-	return &NomicRepository{
-		baseURL: baseURL,
-		model:   "nomic-embed-text",
-		client:  http.DefaultClient,
+type nomicEmbeddingRequest struct {
+	Model string   `json:"model"`
+	Input []string `json:"input"`
+}
+
+type nomicEmbeddingResponse struct {
+	Embeddings [][]float32 `json:"embeddings"`
+}
+
+func NewNomicRepository(client *embedderclient.Client, model string) *NomicRepository {
+	return &NomicRepository{client: client, model: model}
+}
+
+func (r *NomicRepository) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
+	if err := validateInputs(texts); err != nil {
+		return nil, err
 	}
+
+	inputs := make([]string, len(texts))
+	for index, text := range texts {
+		inputs[index] = "search_document: " + text
+	}
+
+	return r.embed(ctx, inputs)
+}
+
+func (r *NomicRepository) EmbedQuery(ctx context.Context, text string) ([]float32, error) {
+	if err := validateInputs([]string{text}); err != nil {
+		return nil, err
+	}
+
+	vectors, err := r.embed(ctx, []string{"search_query: " + text})
+	if err != nil {
+		return nil, err
+	}
+
+	return vectors[0], nil
 }
 
 func (r *NomicRepository) Dimensions() int {
-	return 768
+	return nomicDimensions
 }
 
-func (r *NomicRepository) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	input := types.NomicEmbeddingRequest{
+func (r *NomicRepository) embed(ctx context.Context, texts []string) ([][]float32, error) {
+	var response nomicEmbeddingResponse
+	err := r.client.PostJSON(ctx, "/api/embed", nomicEmbeddingRequest{
 		Model: r.model,
 		Input: texts,
-	}
-	if err := validate.Struct(input); err != nil {
-		return nil, err
-	}
-
-	body, err := json.Marshal(input)
+	}, &response)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("nomic embed: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.baseURL+"/api/embed", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+	if len(response.Embeddings) != len(texts) {
+		return nil, fmt.Errorf("nomic embed: expected %d embeddings, got %d", len(texts), len(response.Embeddings))
 	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("nomic embed failed: %s", resp.Status)
+	for index, vector := range response.Embeddings {
+		if len(vector) != nomicDimensions {
+			return nil, fmt.Errorf("nomic embed: embedding %d has %d dimensions, expected %d", index, len(vector), nomicDimensions)
+		}
 	}
 
-	var out types.NomicEmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+	return response.Embeddings, nil
+}
+
+func validateInputs(texts []string) error {
+	if len(texts) == 0 {
+		return fmt.Errorf("nomic embed: input is empty")
 	}
-	if err := validate.Struct(out); err != nil {
-		return nil, err
+	for index, text := range texts {
+		if strings.TrimSpace(text) == "" {
+			return fmt.Errorf("nomic embed: input %d is empty", index)
+		}
 	}
 
-	return out.Embeddings, nil
+	return nil
 }

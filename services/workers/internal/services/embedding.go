@@ -15,16 +15,11 @@ func NewEmbedderService(repo repository.EmbedderRepository) *EmbedderService {
 }
 
 func (s *EmbedderService) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
-	return s.repo.Embed(ctx, texts)
+	return s.repo.EmbedDocuments(ctx, texts)
 }
 
 func (s *EmbedderService) EmbedQuery(ctx context.Context, text string) ([]float32, error) {
-	vectors, err := s.repo.Embed(ctx, []string{text})
-	if err != nil || len(vectors) == 0 {
-		return nil, err
-	}
-
-	return vectors[0], nil
+	return s.repo.EmbedQuery(ctx, text)
 }
 
 func (s *EmbedderService) Dimensions() int {

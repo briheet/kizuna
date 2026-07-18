@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
+func TestGraphRepositorySaveGithubGraph(t *testing.T) {
 	db := setupDB(t)
 	db.Restore(t)
 
@@ -40,12 +40,13 @@ func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo := cockroachdb.NewGithubRepository(db.Client)
+	repo := cockroachdb.NewGraphRepository(db.Client)
 	config, err := json.Marshal(map[string]string{"owner": "golang", "repo": "go"})
 	require.NoError(t, err)
 
-	dataSourceID, err := repo.UpsertDataSource(ctx, repository.GithubDataSourceInput{
+	dataSourceID, err := repo.UpsertDataSource(ctx, repository.DataSourceInput{
 		TopicID:    topicID,
+		SourceType: "github",
 		Name:       "golang/go",
 		ExternalID: "github:golang/go",
 		SourceLink: "https://github.com/golang/go",
@@ -53,8 +54,9 @@ func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	sameDataSourceID, err := repo.UpsertDataSource(ctx, repository.GithubDataSourceInput{
+	sameDataSourceID, err := repo.UpsertDataSource(ctx, repository.DataSourceInput{
 		TopicID:    topicID,
+		SourceType: "github",
 		Name:       "golang/go",
 		ExternalID: "github:golang/go",
 		SourceLink: "https://github.com/golang/go",
@@ -68,29 +70,35 @@ func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
 	embedding := make([]float32, 768)
 	embedding[0] = 0.1
 
-	err = repo.SaveNodeWithChunks(ctx, dataSourceID, repository.GithubGraphNodeInput{
-		NodeType:   "github_issue",
-		ExternalID: "github:golang/go/issues/42",
-		SourceLink: "https://github.com/golang/go/issues/42",
-		Title:      "issue title",
-		Path:       "issues/42",
-		Properties: props,
-	}, []repository.GithubChunkInput{
-		{Index: 0, Content: "issue body"},
-		{Index: 1, Content: "comment body"},
-	})
+	err = repo.SaveGraph(ctx, dataSourceID, repository.GraphInput{Nodes: []repository.GraphNodeWithChunks{{
+		Node: repository.GraphNodeInput{
+			NodeType:   "github_issue",
+			ExternalID: "github:golang/go/issues/42",
+			SourceLink: "https://github.com/golang/go/issues/42",
+			Title:      "issue title",
+			Path:       "issues/42",
+			Properties: props,
+		},
+		Chunks: []repository.ChunkInput{
+			{Index: 0, Content: "issue body"},
+			{Index: 1, Content: "comment body"},
+		},
+	}}})
 	require.NoError(t, err)
 
-	err = repo.SaveNodeWithChunks(ctx, dataSourceID, repository.GithubGraphNodeInput{
-		NodeType:   "github_issue",
-		ExternalID: "github:golang/go/issues/42",
-		SourceLink: "https://github.com/golang/go/issues/42",
-		Title:      "updated issue title",
-		Path:       "issues/42",
-		Properties: props,
-	}, []repository.GithubChunkInput{
-		{Index: 0, Content: "updated issue body", Embedding: embedding},
-	})
+	err = repo.SaveGraph(ctx, dataSourceID, repository.GraphInput{Nodes: []repository.GraphNodeWithChunks{{
+		Node: repository.GraphNodeInput{
+			NodeType:   "github_issue",
+			ExternalID: "github:golang/go/issues/42",
+			SourceLink: "https://github.com/golang/go/issues/42",
+			Title:      "updated issue title",
+			Path:       "issues/42",
+			Properties: props,
+		},
+		Chunks: []repository.ChunkInput{
+			{Index: 0, Content: "updated issue body", Embedding: embedding},
+		},
+	}}})
 	require.NoError(t, err)
 
 	var nodeCount int
@@ -129,10 +137,10 @@ func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
 	require.Equal(t, "updated issue body", content)
 	require.True(t, hasEmbedding)
 
-	err = repo.SaveGithubGraph(ctx, dataSourceID, repository.GithubGraphInput{
-		Nodes: []repository.GithubGraphNodeWithChunks{
+	err = repo.SaveGraph(ctx, dataSourceID, repository.GraphInput{
+		Nodes: []repository.GraphNodeWithChunks{
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_repository",
 					ExternalID: "github:golang/go",
 					SourceLink: "https://github.com/golang/go",
@@ -141,17 +149,17 @@ func TestGithubRepositorySaveNodeWithChunks(t *testing.T) {
 				},
 			},
 			{
-				Node: repository.GithubGraphNodeInput{
+				Node: repository.GraphNodeInput{
 					NodeType:   "github_issue_comment",
 					ExternalID: "github:golang/go/issues/42/comments/1",
 					SourceLink: "https://github.com/golang/go/issues/42#comment-1",
 					Title:      "Issue #42 comment",
 					Path:       "issues/42/comments/1",
 				},
-				Chunks: []repository.GithubChunkInput{{Index: 0, Content: "comment body", Embedding: embedding}},
+				Chunks: []repository.ChunkInput{{Index: 0, Content: "comment body", Embedding: embedding}},
 			},
 		},
-		Edges: []repository.GithubGraphEdgeInput{{
+		Edges: []repository.GraphEdgeInput{{
 			FromExternalID: "github:golang/go",
 			ToExternalID:   "github:golang/go/issues/42/comments/1",
 			EdgeType:       "has_comment",

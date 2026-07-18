@@ -57,3 +57,74 @@ Also if you read the `flake.nix`, this is an remote build.
 * modules: We make modules of our dependencies and services and then import and use them in our `hosts/`.
 * packages: This contains application/package build definitions. These are then consumed by `modules/`.
 * secrets: Public deploy keys live here. Do not commit private keys, tokens, passwords, or plaintext production secrets.
+
+## Embedding service
+
+The development host runs Ollama on `127.0.0.1:11434` and loads
+`nomic-embed-text:v1.5` when the service starts. The backend waits for the model loader
+before starting. Check the runtime with:
+
+```sh
+systemctl status ollama ollama-model-loader
+```
+
+## Database migrations
+
+The development host pins CockroachDB `v25.4.12`, which supports the `VECTOR`
+type used by the embedding schema. It uses `/var/lib/cockroachdb-v25-4` as its
+state directory so legacy pre-vector development stores are not upgraded in
+place.
+
+`kizuna-backend-migrate` waits for CockroachDB, creates the application database
+when needed, and applies the SQL migrations packaged with the backend. The
+backend starts only after this oneshot completes successfully. Running it again
+with `systemctl restart kizuna-backend-migrate` succeeds without changing an
+up-to-date database.
+
+```sh
+systemctl status cockroachdb kizuna-backend-migrate kizuna-backend kizuna-workers
+```
+
+## Required runtime credentials
+
+Create the encrypted dotenv credentials on the VM before the first deployment.
+
+```sh
+install -d -m 0700 /etc/credstore.encrypted
+
+read -rsp 'OpenAI API key: ' OPENAI_API_KEY && echo
+printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" | systemd-creds encrypt --name=backend-secrets.env - /etc/credstore.encrypted/backend-secrets.env
+unset OPENAI_API_KEY
+
+read -rsp 'GitHub token: ' GITHUB_TOKEN && echo
+printf 'GITHUB_TOKEN=%s\n' "$GITHUB_TOKEN" | systemd-creds encrypt --name=workers-secrets.env - /etc/credstore.encrypted/workers-secrets.env
+unset GITHUB_TOKEN
+
+chmod 0600 /etc/credstore.encrypted/backend-secrets.env /etc/credstore.encrypted/workers-secrets.env
+```
+
+Run these commands on the target VM so the credentials are bound to that host.
+At service start, systemd decrypts each value into its private credential
+directory. The credential path is passed to the application as a second
+`--configPath`, and Viper merges it over the packaged configuration. The
+plaintext values never enter the process environment, repository, or Nix store.
+
+For a fine-grained GitHub token, select only the repositories that Kizuna will
+index and grant read access to Contents, Issues, and Pull requests. Metadata read
+access is included by GitHub.
+
+The backend uses `gpt-5.4-mini` for answer synthesis. GitHub is the only ingestion
+provider that needs a credential in the current deployment; the unused Discord,
+Slack, Confluence, and Jira settings remain blank. Never add encrypted credential
+files or plaintext secret values to the repository.
+
+After deploying, verify the services with:
+
+```sh
+systemctl status cockroachdb ollama ollama-model-loader kizuna-backend-migrate kizuna-backend kizuna-workers kizuna-ui
+journalctl -u kizuna-backend -u kizuna-workers --since '10 minutes ago'
+```
+
+The service starts after the database migration and embedding model are ready.
+The development host exposes only the UI on port `4321` and the backend API on
+port `4000`; CockroachDB SQL and Admin UI listen on `127.0.0.1` only.

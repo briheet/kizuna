@@ -19,7 +19,7 @@ func NewCockroachDbSearchRepository(db *db.Client) *CockroachDbSearchRepository 
 	return &CockroachDbSearchRepository{db: db}
 }
 
-func (r *CockroachDbSearchRepository) SearchChunks(ctx context.Context, topicID uuid.UUID, embedding []float32, limit int) ([]types.SearchResult, error) {
+func (r *CockroachDbSearchRepository) SearchChunks(ctx context.Context, embedding []float32, limit int) ([]types.SearchResult, error) {
 	var results []types.SearchResult
 
 	err := r.db.ExecuteTx(ctx, func(tx pgx.Tx) error {
@@ -30,15 +30,16 @@ func (r *CockroachDbSearchRepository) SearchChunks(ctx context.Context, topicID 
 				c.content,
 				coalesce(gn.title, ''),
 				coalesce(gn.source_link, ''),
+				ds.source_type,
+				gn.node_type,
 				c.embedding <=> $1::VECTOR as distance
 			from chunks c
 			join graph_nodes gn on gn.id = c.graph_node_id
 			join data_sources ds on ds.id = gn.data_source_id
-			where ds.topic_id = $2
-			  and c.embedding is not null
+			where c.embedding is not null
 			order by c.embedding <=> $1::VECTOR
-			limit $3;
-		`, vectorLiteral(embedding), topicID, limit)
+			limit $2;
+		`, vectorLiteral(embedding), limit)
 		if err != nil {
 			return err
 		}
@@ -46,7 +47,7 @@ func (r *CockroachDbSearchRepository) SearchChunks(ctx context.Context, topicID 
 
 		for rows.Next() {
 			var result types.SearchResult
-			if err := rows.Scan(&result.ChunkID, &result.GraphNodeID, &result.Content, &result.Title, &result.SourceLink, &result.Distance); err != nil {
+			if err := rows.Scan(&result.ChunkID, &result.GraphNodeID, &result.Content, &result.Title, &result.SourceLink, &result.SourceType, &result.NodeType, &result.Distance); err != nil {
 				return err
 			}
 			results = append(results, result)

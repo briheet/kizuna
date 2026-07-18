@@ -8,8 +8,8 @@ import (
 	"github.com/briheet/kizuna/workers/internal/db"
 	"github.com/briheet/kizuna/workers/internal/logger"
 	"github.com/briheet/kizuna/workers/internal/providers"
+	"github.com/briheet/kizuna/workers/internal/repository"
 	"github.com/briheet/kizuna/workers/internal/repository/cockroachdb"
-	"github.com/briheet/kizuna/workers/internal/repository/embedder"
 	"github.com/briheet/kizuna/workers/internal/services"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -21,10 +21,10 @@ func NewGithubWorker(
 	dbClient *db.Client,
 	logger *logger.Logger,
 	client *providers.Client,
+	embedderRepository repository.EmbedderRepository,
 ) Worker {
-	githubRepo := cockroachdb.NewGithubRepository(dbClient)
-	embedderRepo := embedder.NewNomicRepository(config.Embedder.BaseURL)
-	embedderService := services.NewEmbedderService(embedderRepo)
+	githubRepo := cockroachdb.NewGraphRepository(dbClient)
+	embedderService := services.NewEmbedderService(embedderRepository)
 	githubService := services.NewGithubService(githubRepo, client.Github(), embedderService)
 
 	return &JobWorker{
